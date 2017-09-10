@@ -52,8 +52,9 @@ func (p *Proxy) Call(args []string, env []string) *Call {
 	defer p.Unlock()
 
 	call := startCall(int64(len(p.Calls)+1), args, env, p.CallFunc)
-	p.Calls = append(p.Calls, call)
+	call.Proxy = p
 
+	p.Calls = append(p.Calls, call)
 	return call
 }
 
@@ -93,6 +94,7 @@ type Call struct {
 	Stdout io.WriteCloser `json:"-"`
 	Stderr io.WriteCloser `json:"-"`
 	Stdin  io.ReadCloser  `json:"-"`
+	Proxy  *Proxy         `json:"-"`
 
 	stdoutReader io.ReadCloser
 	stderrReader io.ReadCloser
