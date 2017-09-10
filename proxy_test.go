@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	binproxy "github.com/lox/go-binproxy"
+	"github.com/lox/binproxy"
 )
 
-func ExampleFromReadme() {
+func ExampleNew() {
 	// create a proxy for the git command that echos some debug
 	proxy, err := binproxy.New("git", func(c *binproxy.Call) {
 		fmt.Fprintln(c.Stdout, "Llamas party!")
@@ -82,5 +82,58 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 
 	if output.String() != "To stdout\nTo stderr\n" {
 		t.Fatalf("Got unexpected output: %q", output.String())
+	}
+}
+
+func TestProxyWithNoOutput(t *testing.T) {
+	proxy, err := binproxy.New("test", func(c *binproxy.Call) {
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	output, err := exec.Command(proxy.Path).CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(output) != "" {
+		t.Fatalf("Got unexpected output: %q", string(output))
+	}
+}
+
+func TestProxyWithLotsOfOutput(t *testing.T) {
+	b := &bytes.Buffer{}
+	for i := 0; i < 10; i++ {
+		b.WriteString(strings.Repeat("llamas", 10))
+	}
+	expected := b.String()
+	fatalCh := make(chan error, 1)
+
+	proxy, err := binproxy.New("test", func(c *binproxy.Call) {
+		n, err := io.Copy(c.Stdout, strings.NewReader(expected))
+		if err != nil {
+			fatalCh <- err
+		} else if n != int64(b.Len()) {
+			fatalCh <- fmt.Errorf("Wrote %d bytes, expected %d", n, len(expected))
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actual, err := exec.Command(proxy.Path).CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-fatalCh:
+		t.Fatal(err)
+	default:
+	}
+
+	if len(expected) != len(actual) {
+		t.Fatalf("Wanted %d bytes of output, got %d", len(expected), len(actual))
 	}
 }

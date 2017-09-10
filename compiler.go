@@ -40,7 +40,7 @@ func compileClient(dest string, vars []string) error {
 
 	dir, err := ioutil.TempDir("", "binproxy")
 	if err != nil {
-		return fmt.Errorf("Error creating temp dir: %v")
+		return fmt.Errorf("Error creating temp dir: %v", err)
 	}
 
 	defer os.RemoveAll(dir)

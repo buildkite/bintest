@@ -3,7 +3,6 @@ package binproxy
 import (
 	"encoding/json"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"path"
@@ -35,7 +34,7 @@ func (s *server) serveRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Lock()
-	call := s.Proxy.Call(req.Args, req.Env)
+	call := s.Proxy.call(req.Args, req.Env)
 	s.handlers[call.ID] = callHandler{Call: call}
 	s.Unlock()
 
@@ -44,6 +43,8 @@ func (s *server) serveRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// log.Printf("[http] %s", r.URL.Path)
+
 	if r.URL.Path == "/" {
 		s.serveRoot(w, r)
 		return
@@ -82,46 +83,20 @@ func startServer(p *Proxy) (*server, error) {
 
 type callHandler struct {
 	*Call
-	sync.Mutex
-	Stdout io.ReadCloser
-	Stderr io.ReadCloser
-	Stdin  io.WriteCloser
 }
 
 func (ch *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ch.Lock()
-	defer ch.Unlock()
-
 	switch path.Base(r.URL.Path) {
 	case "stdout":
-		if ch.Stdout != nil {
-			http.Error(w, "Stdout already opened", http.StatusInternalServerError)
-			return
-		}
-		ch.Stdout = ch.Call.stdoutReader
-		_, _ = io.Copy(w, ch.Stdout)
+		_, _ = io.Copy(w, ch.Call.stdoutReader)
 
 	case "stderr":
-		if ch.Stderr != nil {
-			http.Error(w, "Stderr already opened", http.StatusInternalServerError)
-			return
-		}
-		ch.Stderr = ch.Call.stderrReader
-		_, _ = io.Copy(w, ch.Stderr)
+		_, _ = io.Copy(w, ch.Call.stderrReader)
 
 	case "stdin":
-		if ch.Stdin != nil {
-			http.Error(w, "Stdin already opened", http.StatusInternalServerError)
-			return
-		}
-		ch.Stdin = ch.Call.stdinWriter
-		_, err := io.Copy(ch.Stdin, r.Body)
-		if err != nil {
-			log.Printf("Error copying from stdin request: %v", err)
-		}
-		if err = ch.Stdin.Close(); err != nil {
-			log.Printf("Error closing stdin: %v", err)
-		}
+		_, _ = io.Copy(ch.Call.stdinWriter, r.Body)
+		r.Body.Close()
+		ch.Call.stdinWriter.Close()
 
 	case "exitcode":
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")

@@ -11,7 +11,7 @@ Usage
 ```go
 // create a proxy for the git command that echos some debug
 proxy, err := binproxy.New("git", func(call binproxy.Call) {
-	fmt.Fprintln(call.Stdout, "Llamas party!"))
+	fmt.Fprintln(call.Stdout, "Llama party! 🎉"))
 	call.Exit(0)
 })
 if err != nil {
@@ -21,7 +21,7 @@ if err != nil {
 // call the proxy like a normal binary
 fmt.Println(exec.Command("git", "test", "arguments").CombinedOutput())
 
-# Llamas party!
+// Llama party! 🎉
 ```
 
 Testing
