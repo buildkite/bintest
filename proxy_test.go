@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -15,125 +16,145 @@ import (
 
 func ExampleNew() {
 	// create a proxy for the git command that echos some debug
-	proxy, err := binproxy.New("git", func(c *binproxy.Call) {
-		fmt.Fprintln(c.Stdout, "Llamas party!")
-		c.Exit(0)
-	})
+	proxy, err := binproxy.New("git")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// call the proxy like a normal binary
-	output, err := exec.Command(proxy.Path, "test", "arguments").CombinedOutput()
-	if err != nil {
-		log.Fatalf("Command failed: %v\n%s", err, output)
-	}
+	// call the proxy like a normal binary in the background
+	cmd := exec.Command(proxy.Path)
+	cmd.Stdout = os.Stdout
+	cmd.Start()
 
-	fmt.Printf("%s\n", output)
-	// Output: Llamas party!
+	// handle invocations of the proxy binary
+	call := <-proxy.Ch
+	fmt.Fprintln(call.Stdout, "Llama party! 🎉")
+	call.Exit(0)
+
+	// wait for the command to finish
+	cmd.Wait()
+
+	// Output: Llama party! 🎉
 }
 
 func TestProxyWithStdin(t *testing.T) {
-	proxy, err := binproxy.New("test", func(c *binproxy.Call) {
-		fmt.Fprintln(c.Stdout, "Copied output:")
-		io.Copy(c.Stdout, c.Stdin)
-	})
+	proxy, err := binproxy.New("test")
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	output := &bytes.Buffer{}
-
-	cmd := exec.Command(proxy.Path, "test", "arguments")
-	cmd.Stdin = strings.NewReader("This is my stdin")
-	cmd.Stdout = output
-	cmd.Stderr = output
-
-	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
 
-	if output.String() != "Copied output:\nThis is my stdin" {
-		t.Fatalf("Got unexpected output: %q", output.String())
+	stdout := &bytes.Buffer{}
+
+	cmd := exec.Command(proxy.Path)
+	cmd.Stdin = strings.NewReader("This is my stdin")
+	cmd.Stdout = stdout
+	cmd.Start()
+
+	call := <-proxy.Ch
+	fmt.Fprintln(call.Stdout, "Copied output:")
+	io.Copy(call.Stdout, call.Stdin)
+	call.Exit(0)
+
+	// wait for the command to finish
+	if err = cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	if stdout.String() != "Copied output:\nThis is my stdin" {
+		t.Fatalf("Got unexpected output: %q", stdout.String())
 	}
 }
 
 func TestProxyWithStdoutAndStderr(t *testing.T) {
-	proxy, err := binproxy.New("test", func(c *binproxy.Call) {
-		if !reflect.DeepEqual(c.Args, []string{"test", "arguments"}) {
-			t.Fatalf("Unexpected args %#v", c.Args)
-		}
-		fmt.Fprintln(c.Stdout, "To stdout")
-		fmt.Fprintln(c.Stdout, "To stderr")
-	})
+	proxy, err := binproxy.New("test")
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	output := &bytes.Buffer{}
-
-	cmd := exec.Command(proxy.Path, "test", "arguments")
-	cmd.Stdout = output
-	cmd.Stderr = output
-
-	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
 
-	if output.String() != "To stdout\nTo stderr\n" {
-		t.Fatalf("Got unexpected output: %q", output.String())
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	call := <-proxy.Ch
+	if !reflect.DeepEqual(call.Args, []string{"test", "arguments"}) {
+		t.Errorf("Unexpected args %#v", call.Args)
+		return
+	}
+	fmt.Fprintln(call.Stdout, "To stdout")
+	fmt.Fprintln(call.Stderr, "To stderr")
+	call.Exit(0)
+
+	// wait for the command to finish
+	if err = cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	if stdout.String() != "To stdout\n" {
+		t.Fatalf("Got unexpected output: %q", stdout.String())
+	}
+
+	if stderr.String() != "To stderr\n" {
+		t.Fatalf("Got unexpected output: %q", stderr.String())
 	}
 }
 
 func TestProxyWithNoOutput(t *testing.T) {
-	proxy, err := binproxy.New("test", func(c *binproxy.Call) {
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	output, err := exec.Command(proxy.Path).CombinedOutput()
+	proxy, err := binproxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if string(output) != "" {
-		t.Fatalf("Got unexpected output: %q", string(output))
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Start()
+
+	call := <-proxy.Ch
+	call.Exit(0)
+
+	// wait for the command to finish
+	if err = cmd.Wait(); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestProxyWithLotsOfOutput(t *testing.T) {
-	b := &bytes.Buffer{}
+	var expected string
 	for i := 0; i < 10; i++ {
-		b.WriteString(strings.Repeat("llamas", 10))
+		expected += strings.Repeat("llamas", 10)
 	}
-	expected := b.String()
-	fatalCh := make(chan error, 1)
 
-	proxy, err := binproxy.New("test", func(c *binproxy.Call) {
-		n, err := io.Copy(c.Stdout, strings.NewReader(expected))
-		if err != nil {
-			fatalCh <- err
-		} else if n != int64(b.Len()) {
-			fatalCh <- fmt.Errorf("Wrote %d bytes, expected %d", n, len(expected))
-		}
-	})
+	actual := &bytes.Buffer{}
+
+	proxy, err := binproxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	actual, err := exec.Command(proxy.Path).CombinedOutput()
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Stdout = actual
+	cmd.Start()
+
+	call := <-proxy.Ch
+	n, err := io.Copy(call.Stdout, strings.NewReader(expected))
 	if err != nil {
 		t.Fatal(err)
+	} else if n != int64(len(expected)) {
+		t.Fatalf("Wrote %d bytes, expected %d", n, len(expected))
 	}
+	call.Exit(0)
 
-	select {
-	case err := <-fatalCh:
+	// wait for the command to finish
+	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
-	default:
 	}
 
-	if len(expected) != len(actual) {
-		t.Fatalf("Wanted %d bytes of output, got %d", len(expected), len(actual))
+	if len(expected) != actual.Len() {
+		t.Fatalf("Wanted %d bytes of output, got %d", len(expected), actual.Len())
 	}
 }

@@ -5,20 +5,27 @@ import (
 	"io"
 	"io/ioutil"
 	"path/filepath"
+	"sync"
 )
 
 // Proxy connects to a compiled binary to orchestrate it's input/output
 type Proxy struct {
-	CallFunc
+	sync.Mutex
 
-	Path  string
+	// Ch is the channel of calls
+	Ch chan *Call
+
+	// Path is the full path to the compiled binproxy file
+	Path string
+
+	// Calls are a history of calls to the Proxy
 	Calls []*Call
 
 	server *server
 }
 
-// New returns a new instance of a Proxy, compiled to path and executing cf on call
-func New(path string, cf CallFunc) (*Proxy, error) {
+// New returns a new instance of a Proxy with a compiled binary
+func New(path string) (*Proxy, error) {
 	if !filepath.IsAbs(path) {
 		dir, err := ioutil.TempDir("", "binproxy")
 		if err != nil {
@@ -28,8 +35,8 @@ func New(path string, cf CallFunc) (*Proxy, error) {
 	}
 
 	p := &Proxy{
-		Path:     path,
-		CallFunc: cf,
+		Path: path,
+		Ch:   make(chan *Call),
 	}
 
 	server, err := startServer(p)
@@ -47,45 +54,26 @@ func New(path string, cf CallFunc) (*Proxy, error) {
 	return p, nil
 }
 
-func (p *Proxy) call(args []string, env []string) *Call {
-	call := startCall(int64(len(p.Calls)+1), args, env, p.CallFunc)
+func (p *Proxy) newCall(args []string, env []string) *Call {
+	p.Lock()
+	defer p.Unlock()
+
+	call := &Call{
+		ID:         int64(len(p.Calls) + 1),
+		Args:       args,
+		Env:        env,
+		exitCodeCh: make(chan int),
+		doneCh:     make(chan struct{}),
+	}
+
 	p.Calls = append(p.Calls, call)
 	return call
 }
 
-// CallFunc is the logic to execute when a binary is called
-type CallFunc func(call *Call)
-
-func startCall(id int64, args []string, env []string, f CallFunc) *Call {
-	outR, outW := io.Pipe()
-	errR, errW := io.Pipe()
-	inR, inW := io.Pipe()
-
-	c := &Call{
-		ID:           id,
-		Args:         args,
-		Env:          env,
-		Stderr:       errW,
-		stderrReader: errR,
-		Stdout:       outW,
-		stdoutReader: outR,
-		Stdin:        inR,
-		stdinWriter:  inW,
-	}
-
-	go func() {
-		f(c)
-
-		// stdout and stderr close here, stdin closes in the server
-		c.stdoutReader.Close()
-		c.stderrReader.Close()
-	}()
-
-	return c
-}
-
 // Call is created for every call to the proxied binary
 type Call struct {
+	sync.Mutex
+
 	ID   int64
 	Args []string
 	Env  []string
@@ -99,14 +87,19 @@ type Call struct {
 	// Stdin is the input reader for stdin from the proxied binary
 	Stdin io.ReadCloser `json:"-"`
 
-	proxy        *Proxy
-	stdoutReader io.ReadCloser
-	stderrReader io.ReadCloser
-	stdinWriter  io.WriteCloser
-	exitCode     int
+	proxy      *Proxy
+	exitCodeCh chan int
+	doneCh     chan struct{}
 }
 
-// Exit sets the exit code for the remote binary to exit with
+// Exit finishes the call and the proxied binary returns the exit code
 func (c *Call) Exit(code int) {
-	c.exitCode = code
+	c.Stderr.Close()
+	c.Stdout.Close()
+
+	// send the exit code to the server
+	c.exitCodeCh <- code
+
+	// wait for the client to get it
+	<-c.doneCh
 }

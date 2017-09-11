@@ -14,8 +14,8 @@ import (
 type server struct {
 	sync.Mutex
 	Listener net.Listener
-	Proxy    *Proxy
 
+	proxy    *Proxy
 	handlers map[int64]callHandler
 }
 
@@ -24,7 +24,7 @@ type serverRequest struct {
 	Env  []string
 }
 
-func (s *server) serveRoot(w http.ResponseWriter, r *http.Request) {
+func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	var req serverRequest
 
 	// parse the posted args end env
@@ -34,19 +34,39 @@ func (s *server) serveRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Lock()
-	call := s.Proxy.call(req.Args, req.Env)
-	s.handlers[call.ID] = callHandler{Call: call}
+
+	// these pipes connect the call to the various http request/responses
+	outR, outW := io.Pipe()
+	errR, errW := io.Pipe()
+	inR, inW := io.Pipe()
+
+	// create a custom handler with the id for subsequent requests to hit
+	call := s.proxy.newCall(req.Args, req.Env)
+	call.Stdout = outW
+	call.Stderr = errW
+	call.Stdin = inR
+
+	s.handlers[call.ID] = callHandler{
+		call:   call,
+		stdout: outR,
+		stderr: errR,
+		stdin:  inW,
+	}
+
 	s.Unlock()
+
+	// dispatch to whatever handles the call
+	s.proxy.Ch <- call
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(&call)
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// log.Printf("[http] %s", r.URL.Path)
+	// log.Printf("[http] START %s", r.URL.Path)
 
 	if r.URL.Path == "/" {
-		s.serveRoot(w, r)
+		s.serveInitialCall(w, r)
 		return
 	}
 
@@ -63,6 +83,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch.ServeHTTP(w, r)
+	// log.Printf("[http] END %s", r.URL.Path)
 }
 
 func startServer(p *Proxy) (*server, error) {
@@ -73,7 +94,7 @@ func startServer(p *Proxy) (*server, error) {
 
 	s := &server{
 		Listener: l,
-		Proxy:    p,
+		proxy:    p,
 		handlers: map[int64]callHandler{},
 	}
 
@@ -82,28 +103,56 @@ func startServer(p *Proxy) (*server, error) {
 }
 
 type callHandler struct {
-	*Call
+	sync.WaitGroup
+	call   *Call
+	stdout *io.PipeReader
+	stderr *io.PipeReader
+	stdin  *io.PipeWriter
 }
 
 func (ch *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch path.Base(r.URL.Path) {
 	case "stdout":
-		_, _ = io.Copy(w, ch.Call.stdoutReader)
+		copyPipeWithFlush(w, ch.stdout)
 
 	case "stderr":
-		_, _ = io.Copy(w, ch.Call.stderrReader)
+		copyPipeWithFlush(w, ch.stderr)
 
 	case "stdin":
-		_, _ = io.Copy(ch.Call.stdinWriter, r.Body)
+		_, _ = io.Copy(ch.stdin, r.Body)
 		r.Body.Close()
-		ch.Call.stdinWriter.Close()
+		ch.stdin.Close()
 
 	case "exitcode":
+		exitCode := <-ch.call.exitCodeCh
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")
-		json.NewEncoder(w).Encode(&ch.Call.exitCode)
+		json.NewEncoder(w).Encode(&exitCode)
+		w.(http.Flusher).Flush()
+		ch.call.doneCh <- struct{}{}
 
 	default:
 		http.Error(w, "Unhandled request", http.StatusNotFound)
 		return
+	}
+}
+
+func copyPipeWithFlush(res http.ResponseWriter, pipeReader *io.PipeReader) {
+	buffer := make([]byte, 1024)
+	for {
+		n, err := pipeReader.Read(buffer)
+		if err != nil {
+			pipeReader.Close()
+			break
+		}
+
+		data := buffer[0:n]
+		res.Write(data)
+		if f, ok := res.(http.Flusher); ok {
+			f.Flush()
+		}
+		//reset buffer
+		for i := 0; i < n; i++ {
+			buffer[i] = 0
+		}
 	}
 }

@@ -10,16 +10,19 @@ Usage
 
 ```go
 // create a proxy for the git command that echos some debug
-proxy, err := binproxy.New("git", func(call binproxy.Call) {
-	fmt.Fprintln(call.Stdout, "Llama party! 🎉"))
-	call.Exit(0)
-})
+proxy, err := binproxy.New("git")
 if err != nil {
 	log.Fatal(err)
 }
 
 // call the proxy like a normal binary
-fmt.Println(exec.Command("git", "test", "arguments").CombinedOutput())
+go fmt.Println(exec.Command("git", "test", "arguments").CombinedOutput())
+
+// handle invocations of the proxy binary
+for call := range proxy.Ch {
+  fmt.Fprintln(call.Stdout, "Llama party! 🎉")
+	call.Exit(0)
+}
 
 // Llama party! 🎉
 ```
@@ -27,6 +30,5 @@ fmt.Println(exec.Command("git", "test", "arguments").CombinedOutput())
 Testing
 -------
 
-The key thing that binproxy is designed for is mocking binaries in tests. Think 
+The key thing that binproxy is designed for is mocking binaries in tests. Think
 of it like mock's for binaries. Inspired by bats-mock and go-binmock.
-
