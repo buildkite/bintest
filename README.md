@@ -34,7 +34,7 @@ Proxies
 // create a proxy for the git command that echos some debug
 proxy, err := proxy.New("git")
 if err != nil {
-	log.Fatal(err)
+  log.Fatal(err)
 }
 
 // call the proxy like a normal binary
@@ -43,7 +43,7 @@ go fmt.Println(exec.Command("git", "test", "arguments").CombinedOutput())
 // handle invocations of the proxy binary
 for call := range proxy.Ch {
   fmt.Fprintln(call.Stdout, "Llama party! 🎉")
-	call.Exit(0)
+  call.Exit(0)
 }
 
 // Llama party! 🎉
