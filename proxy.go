@@ -19,14 +19,14 @@ type Proxy struct {
 	// Path is the full path to the compiled binproxy file
 	Path string
 
+	// A count of how many calls have been made
+	CallCount int64
+
 	// A temporary directory created for the binary
 	tempDir string
 
 	// The http server the proxy runs
 	server *server
-
-	// A count of how many calls have been made
-	callCount int64
 }
 
 // New returns a new instance of a Proxy with a compiled binary
@@ -48,13 +48,14 @@ func New(path string) (*Proxy, error) {
 		tempDir: tempDir,
 	}
 
-	server, err := startServer(p)
+	var err error
+	p.server, err = startServer(p)
 	if err != nil {
 		return nil, err
 	}
 
 	err = compileClient(path, []string{
-		"main.server=" + server.Listener.Addr().String(),
+		"main.server=" + p.server.Listener.Addr().String(),
 	})
 	if err != nil {
 		return nil, err
@@ -65,7 +66,7 @@ func New(path string) (*Proxy, error) {
 
 func (p *Proxy) newCall(args []string, env []string) *Call {
 	return &Call{
-		ID:         atomic.AddInt64(&p.callCount, 1),
+		ID:         atomic.AddInt64(&p.CallCount, 1),
 		Args:       args,
 		Env:        env,
 		exitCodeCh: make(chan int),

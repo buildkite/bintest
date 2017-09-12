@@ -13,7 +13,7 @@ import (
 
 type server struct {
 	sync.Mutex
-	Listener net.Listener
+	net.Listener
 
 	proxy    *Proxy
 	handlers map[int64]callHandler
