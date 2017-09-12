@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// go:generate go-bindata -pkg binproxy data/
+
 func compile(dest string, src string, vars []string) error {
 	args := []string{
 		"build",

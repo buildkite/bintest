@@ -4,39 +4,48 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 )
 
-// Proxy connects to a compiled binary to orchestrate it's input/output
+// Proxy provides a way to programatically respond to invocations of a compiled
+// binary that is created
 type Proxy struct {
-	sync.Mutex
-
 	// Ch is the channel of calls
 	Ch chan *Call
 
 	// Path is the full path to the compiled binproxy file
 	Path string
 
-	// Calls are a history of calls to the Proxy
-	Calls []*Call
+	// A temporary directory created for the binary
+	tempDir string
 
+	// The http server the proxy runs
 	server *server
+
+	// A count of how many calls have been made
+	callCount int64
 }
 
 // New returns a new instance of a Proxy with a compiled binary
 func New(path string) (*Proxy, error) {
+	var tempDir string
+
 	if !filepath.IsAbs(path) {
-		dir, err := ioutil.TempDir("", "binproxy")
+		var err error
+		tempDir, err = ioutil.TempDir("", "binproxy")
 		if err != nil {
 			return nil, fmt.Errorf("Error creating temp dir: %v", err)
 		}
-		path = filepath.Join(dir, path)
+		path = filepath.Join(tempDir, path)
 	}
 
 	p := &Proxy{
-		Path: path,
-		Ch:   make(chan *Call),
+		Path:    path,
+		Ch:      make(chan *Call),
+		tempDir: tempDir,
 	}
 
 	server, err := startServer(p)
@@ -55,19 +64,21 @@ func New(path string) (*Proxy, error) {
 }
 
 func (p *Proxy) newCall(args []string, env []string) *Call {
-	p.Lock()
-	defer p.Unlock()
-
-	call := &Call{
-		ID:         int64(len(p.Calls) + 1),
+	return &Call{
+		ID:         atomic.AddInt64(&p.callCount, 1),
 		Args:       args,
 		Env:        env,
 		exitCodeCh: make(chan int),
 		doneCh:     make(chan struct{}),
 	}
+}
 
-	p.Calls = append(p.Calls, call)
-	return call
+// Close the proxy and remove the compiled file
+func (p *Proxy) Close() error {
+	if p.tempDir != "" {
+		defer os.RemoveAll(p.tempDir)
+	}
+	return p.server.Listener.Close()
 }
 
 // Call is created for every call to the proxied binary
@@ -87,7 +98,7 @@ type Call struct {
 	// Stdin is the input reader for stdin from the proxied binary
 	Stdin io.ReadCloser `json:"-"`
 
-	proxy      *Proxy
+	// proxy      *Proxy
 	exitCodeCh chan int
 	doneCh     chan struct{}
 }

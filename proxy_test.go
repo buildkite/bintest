@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lox/binproxy"
@@ -62,6 +63,44 @@ func TestProxyWithStdin(t *testing.T) {
 
 	if stdout.String() != "Copied output:\nThis is my stdin" {
 		t.Fatalf("Got unexpected output: %q", stdout.String())
+	}
+}
+
+func TestProxyWithStdout(t *testing.T) {
+	proxy, err := binproxy.New("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Start()
+
+	call := <-proxy.Ch
+	fmt.Fprintln(call.Stdout, "Yup!")
+	call.Exit(0)
+
+	// wait for the command to finish
+	if err = cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProxyWithStderr(t *testing.T) {
+	proxy, err := binproxy.New("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Start()
+
+	call := <-proxy.Ch
+	fmt.Fprintln(call.Stderr, "Yup!")
+	call.Exit(0)
+
+	// wait for the command to finish
+	if err = cmd.Wait(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -156,5 +195,51 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 
 	if len(expected) != actual.Len() {
 		t.Fatalf("Wanted %d bytes of output, got %d", len(expected), actual.Len())
+	}
+}
+
+func TestProxyWithNonZeroExitCode(t *testing.T) {
+	proxy, err := binproxy.New("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Start()
+
+	call := <-proxy.Ch
+	call.Exit(24)
+
+	// wait for the command to finish
+	err = cmd.Wait()
+
+	if exiterr, ok := err.(*exec.ExitError); !ok {
+		t.Fatal("Should have gotten an error from wait")
+	} else {
+		if status, ok := exiterr.Sys().(syscall.WaitStatus); !ok {
+			t.Fatalf("Should have gotten an syscall.WaitStatus, got %v", exiterr)
+		} else if status.ExitStatus() != 24 {
+			t.Fatalf("Expected exit code %d, got %d", 24, status.ExitStatus())
+		}
+	}
+}
+
+func TestProxyCloseRemovesFile(t *testing.T) {
+	proxy, err := binproxy.New("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = os.Stat(proxy.Path); os.IsNotExist(err) {
+		t.Fatalf("%s doesn't exist: %v", proxy.Path, err)
+	}
+
+	err = proxy.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = os.Stat(proxy.Path); os.IsExist(err) {
+		t.Fatalf("%s still exists, but shouldn't", proxy.Path)
 	}
 }

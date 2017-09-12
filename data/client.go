@@ -44,16 +44,16 @@ func main() {
 		r, w := io.Pipe()
 
 		go func() {
-			_, err := io.Copy(w, os.Stdin)
-			if err != nil {
+			_, copyErr := io.Copy(w, os.Stdin)
+			if copyErr != nil {
 				w.CloseWithError(err)
 			}
 			w.Close()
 		}()
 
-		stdinReq, err := http.NewRequest("POST", fmt.Sprintf("%s%d/stdin", u, resp.ID), r)
-		if err != nil {
-			panic(err)
+		stdinReq, stdinErr := http.NewRequest("POST", fmt.Sprintf("%s%d/stdin", u, resp.ID), r)
+		if stdinErr != nil {
+			panic(stdinErr)
 		}
 
 		_, err = http.DefaultClient.Do(stdinReq)
@@ -63,27 +63,31 @@ func main() {
 	}()
 
 	// handle stdout
-	stdout, err := http.Get(fmt.Sprintf("%s%d/stdout", u, resp.ID))
-	if err != nil {
-		panic(err)
-	}
-
 	go func() {
-		io.Copy(os.Stdout, stdout.Body)
-		stdout.Body.Close()
-		wg.Done()
+		stdout, stdoutErr := http.Get(fmt.Sprintf("%s%d/stdout", u, resp.ID))
+		if stdoutErr != nil {
+			panic(stdoutErr)
+		}
+
+		go func() {
+			io.Copy(os.Stdout, stdout.Body)
+			stdout.Body.Close()
+			wg.Done()
+		}()
 	}()
 
 	// handle stderr
-	stderr, err := http.Get(fmt.Sprintf("%s%d/stderr", u, resp.ID))
-	if err != nil {
-		panic(err)
-	}
-
 	go func() {
-		io.Copy(os.Stderr, stderr.Body)
-		stderr.Body.Close()
-		wg.Done()
+		stderr, stderrErr := http.Get(fmt.Sprintf("%s%d/stderr", u, resp.ID))
+		if stderrErr != nil {
+			panic(stderrErr)
+		}
+
+		go func() {
+			io.Copy(os.Stderr, stderr.Body)
+			stderr.Body.Close()
+			wg.Done()
+		}()
 	}()
 
 	wg.Wait()
