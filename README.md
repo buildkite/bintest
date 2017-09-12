@@ -1,16 +1,38 @@
-Binproxy
-=========
+Bintest
+=======
 
-Creates binaries (anything that golang compiles to) that proxy their invocation
-back to the caller. Designed as a building block for mocking out external binaries
-in tests.
+A set of tools for generating binaries for testing. Mock objects are the primary usage,
+built on top of a general Proxy object that allows for binaries to be added to a system under test
+that are controlled from the main test case.
 
-Usage
+Mocks
 -----
 
 ```go
+agent, err := bintest.Mock("buildkite-agent")
+if err != nil {
+  t.Fatal(err)
+}
+
+agent.
+  Expect("meta-data", "exists", "buildkite:git:commit").
+  AndExitWith(1)
+agent.
+  Expect("meta-data", "set", mock.MatchAny()).
+  AndExitWith(0)
+agent.
+  Expect("meta-data", "set", "buildkite:git:branch", mock.MatchAny()).
+  AndExitWith(0)
+
+agent.AssertExpectations(t)
+```
+
+Proxies
+-------
+
+```go
 // create a proxy for the git command that echos some debug
-proxy, err := binproxy.New("git")
+proxy, err := proxy.New("git")
 if err != nil {
 	log.Fatal(err)
 }
@@ -27,8 +49,7 @@ for call := range proxy.Ch {
 // Llama party! 🎉
 ```
 
-Testing
--------
+Credit
+------
 
-The key thing that binproxy is designed for is mocking binaries in tests. Think
-of it like mock's for binaries. Inspired by bats-mock and go-binmock.
+Inspired by bats-mock and go-binmock.

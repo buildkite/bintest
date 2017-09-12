@@ -1,4 +1,4 @@
-package binproxy
+package proxy
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// go:generate go-bindata -pkg binproxy data/
+//go:generate go-bindata -pkg proxy data/
 
 func compile(dest string, src string, vars []string) error {
 	args := []string{

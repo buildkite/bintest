@@ -1,4 +1,4 @@
-package binproxy
+package proxy
 
 import (
 	"fmt"

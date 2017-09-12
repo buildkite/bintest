@@ -1,14 +1,14 @@
-package mock_test
+package bintest_test
 
 import (
 	"os/exec"
 	"testing"
 
-	"github.com/lox/binproxy/mock"
+	"github.com/lox/bintest"
 )
 
 func TestCallingMockWithNoExpectationsSet(t *testing.T) {
-	m, err := mock.New("test")
+	m, err := bintest.NewMock("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestCallingMockWithNoExpectationsSet(t *testing.T) {
 }
 
 func TestCallingMockWithExpectationsSet(t *testing.T) {
-	m, err := mock.New("test")
+	m, err := bintest.NewMock("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 }
 
 func TestMockWithPassthroughToLocalCommand(t *testing.T) {
-	m, err := mock.New("echo")
+	m, err := bintest.NewMock("echo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,15 +72,15 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 
 func TestArgumentsThatDontMatch(t *testing.T) {
 	var testCases = []struct {
-		expected mock.Arguments
+		expected bintest.Arguments
 		actual   []string
 	}{
 		{
-			mock.Arguments{"test", "llamas", "rock"},
+			bintest.Arguments{"test", "llamas", "rock"},
 			[]string{"test", "llamas", "alpacas"},
 		},
 		{
-			mock.Arguments{"test", "llamas"},
+			bintest.Arguments{"test", "llamas"},
 			[]string{"test", "llamas", "alpacas"},
 		},
 	}
@@ -95,15 +95,15 @@ func TestArgumentsThatDontMatch(t *testing.T) {
 
 func TestArgumentsThatMatch(t *testing.T) {
 	var testCases = []struct {
-		expected mock.Arguments
+		expected bintest.Arguments
 		actual   []string
 	}{
 		{
-			mock.Arguments{"test", "llamas", "rock"},
+			bintest.Arguments{"test", "llamas", "rock"},
 			[]string{"test", "llamas", "rock"},
 		},
 		{
-			mock.Arguments{"test", "llamas", mock.MatchAny()},
+			bintest.Arguments{"test", "llamas", bintest.MatchAny()},
 			[]string{"test", "llamas", "rock"},
 		},
 	}
@@ -118,15 +118,15 @@ func TestArgumentsThatMatch(t *testing.T) {
 
 func TestArgumentsToString(t *testing.T) {
 	var testCases = []struct {
-		args     mock.Arguments
+		args     bintest.Arguments
 		expected string
 	}{
 		{
-			mock.Arguments{"test", "llamas", "rock"},
+			bintest.Arguments{"test", "llamas", "rock"},
 			`"test" "llamas" "rock"`,
 		},
 		{
-			mock.Arguments{"test", "llamas", mock.MatchAny()},
+			bintest.Arguments{"test", "llamas", bintest.MatchAny()},
 			`"test" "llamas" *`,
 		},
 	}

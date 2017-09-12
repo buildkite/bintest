@@ -3,7 +3,7 @@
 // data/client.go
 // DO NOT EDIT!
 
-package binproxy
+package proxy
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package mock
+package bintest
 
 import (
 	"bytes"
@@ -11,21 +11,21 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/lox/binproxy"
+	"github.com/lox/bintest/proxy"
 )
 
 const (
 	infinite = -1
 )
 
-// Mock provides a wrapper around a binstub for testing
+// Mock provides a wrapper around a Proxy for testing
 type Mock struct {
 	sync.Mutex
 
 	// Name of the binary
 	Name string
 
-	// Path to the binproxy binary
+	// Path to the bintest binary
 	Path string
 
 	// Actual invocations that occurred
@@ -35,17 +35,17 @@ type Mock struct {
 	expected []*Expectation
 
 	// The related proxy
-	proxy *binproxy.Proxy
+	proxy *proxy.Proxy
 
 	// A command to passthrough execution to
 	passthroughPath string
 }
 
-// New returns a new Mock instance, or fails if the binproxy fails to compile
-func New(path string) (*Mock, error) {
+// Mock returns a new Mock instance, or fails if the bintest fails to compile
+func NewMock(path string) (*Mock, error) {
 	m := &Mock{}
 
-	proxy, err := binproxy.New(path)
+	proxy, err := proxy.New(path)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func New(path string) (*Mock, error) {
 	return m, nil
 }
 
-func (m *Mock) invoke(call *binproxy.Call) {
+func (m *Mock) invoke(call *proxy.Call) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -92,7 +92,7 @@ func (m *Mock) invoke(call *binproxy.Call) {
 	})
 }
 
-func (m *Mock) invokePassthrough(call *binproxy.Call) int {
+func (m *Mock) invokePassthrough(call *proxy.Call) int {
 	cmd := exec.Command(m.passthroughPath, call.Args...)
 	cmd.Env = call.Env
 	cmd.Stdout = call.Stdout

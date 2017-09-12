@@ -1,4 +1,4 @@
-package binproxy_test
+package proxy_test
 
 import (
 	"bytes"
@@ -13,23 +13,23 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/lox/binproxy"
+	"github.com/lox/bintest/proxy"
 )
 
 func ExampleNew() {
 	// create a proxy for the git command that echos some debug
-	proxy, err := binproxy.New("git")
+	p, err := proxy.New("git")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// call the proxy like a normal binary in the background
-	cmd := exec.Command(proxy.Path)
+	cmd := exec.Command(p.Path)
 	cmd.Stdout = os.Stdout
 	cmd.Start()
 
 	// handle invocations of the proxy binary
-	call := <-proxy.Ch
+	call := <-p.Ch
 	fmt.Fprintln(call.Stdout, "Llama party! 🎉")
 	call.Exit(0)
 
@@ -40,7 +40,7 @@ func ExampleNew() {
 }
 
 func TestProxyWithStdin(t *testing.T) {
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestProxyWithStdin(t *testing.T) {
 }
 
 func TestProxyWithStdout(t *testing.T) {
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestProxyWithStdout(t *testing.T) {
 }
 
 func TestProxyWithStderr(t *testing.T) {
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestProxyWithStderr(t *testing.T) {
 }
 
 func TestProxyWithStdoutAndStderr(t *testing.T) {
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 }
 
 func TestProxyWithNoOutput(t *testing.T) {
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 
 	actual := &bytes.Buffer{}
 
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 }
 
 func TestProxyWithNonZeroExitCode(t *testing.T) {
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 }
 
 func TestProxyCloseRemovesFile(t *testing.T) {
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,13 +246,13 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 }
 
 func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "binproxy-wd-test")
+	tempDir, err := ioutil.TempDir("", "proxy-wd-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	proxy, err := binproxy.New("test")
+	proxy, err := proxy.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}
