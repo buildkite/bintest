@@ -17,6 +17,7 @@ var (
 type request struct {
 	Args []string
 	Env  []string
+	Dir  string
 }
 
 type response struct {
@@ -26,9 +27,15 @@ type response struct {
 func main() {
 	u := fmt.Sprintf("http://%s/", server)
 
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+
 	resp, err := jsonPost(u, request{
 		Args: os.Args[1:],
 		Env:  os.Environ(),
+		Dir:  wd,
 	})
 
 	if err != nil {

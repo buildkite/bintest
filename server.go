@@ -22,6 +22,11 @@ type server struct {
 type serverRequest struct {
 	Args []string
 	Env  []string
+	Dir  string
+}
+
+type serverResponse struct {
+	ID int64
 }
 
 func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +46,7 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	inR, inW := io.Pipe()
 
 	// create a custom handler with the id for subsequent requests to hit
-	call := s.proxy.newCall(req.Args, req.Env)
+	call := s.proxy.newCall(req.Args, req.Env, req.Dir)
 	call.Stdout = outW
 	call.Stderr = errW
 	call.Stdin = inR
@@ -59,7 +64,9 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	s.proxy.Ch <- call
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(&call)
+	json.NewEncoder(w).Encode(&serverResponse{
+		ID: call.ID,
+	})
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

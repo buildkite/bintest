@@ -64,11 +64,12 @@ func New(path string) (*Proxy, error) {
 	return p, nil
 }
 
-func (p *Proxy) newCall(args []string, env []string) *Call {
+func (p *Proxy) newCall(args []string, env []string, dir string) *Call {
 	return &Call{
 		ID:         atomic.AddInt64(&p.CallCount, 1),
 		Args:       args,
 		Env:        env,
+		Dir:        dir,
 		exitCodeCh: make(chan int),
 		doneCh:     make(chan struct{}),
 	}
@@ -89,6 +90,7 @@ type Call struct {
 	ID   int64
 	Args []string
 	Env  []string
+	Dir  string
 
 	// Stdout is the output writer to send stdout to in the proxied binary
 	Stdout io.WriteCloser `json:"-"`
@@ -106,8 +108,8 @@ type Call struct {
 
 // Exit finishes the call and the proxied binary returns the exit code
 func (c *Call) Exit(code int) {
-	c.Stderr.Close()
-	c.Stdout.Close()
+	_ = c.Stderr.Close()
+	_ = c.Stdout.Close()
 
 	// send the exit code to the server
 	c.exitCodeCh <- code

@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/lox/binproxy"
@@ -33,6 +36,9 @@ type Mock struct {
 
 	// The related proxy
 	proxy *binproxy.Proxy
+
+	// A command to passthrough execution to
+	passthroughPath string
 }
 
 // New returns a new Mock instance, or fails if the binproxy fails to compile
@@ -44,7 +50,7 @@ func New(path string) (*Mock, error) {
 		return nil, err
 	}
 
-	m.Name = filepath.Base(m.Name)
+	m.Name = filepath.Base(proxy.Path)
 	m.Path = proxy.Path
 	m.proxy = proxy
 
@@ -69,9 +75,14 @@ func (m *Mock) invoke(call *binproxy.Call) {
 
 	expected.Lock()
 	defer expected.Unlock()
-	_, _ = io.Copy(call.Stdout, expected.writeStdout)
-	_, _ = io.Copy(call.Stderr, expected.writeStderr)
-	call.Exit(expected.exitCode)
+
+	if m.passthroughPath == "" {
+		_, _ = io.Copy(call.Stdout, expected.writeStdout)
+		_, _ = io.Copy(call.Stderr, expected.writeStderr)
+		call.Exit(expected.exitCode)
+	} else {
+		call.Exit(m.invokePassthrough(call))
+	}
 
 	expected.totalCalls++
 
@@ -79,6 +90,37 @@ func (m *Mock) invoke(call *binproxy.Call) {
 		Args: call.Args,
 		Env:  call.Env,
 	})
+}
+
+func (m *Mock) invokePassthrough(call *binproxy.Call) int {
+	cmd := exec.Command(m.passthroughPath, call.Args...)
+	cmd.Env = call.Env
+	cmd.Stdout = call.Stdout
+	cmd.Stderr = call.Stderr
+	cmd.Stdin = call.Stdin
+	cmd.Dir = call.Dir
+
+	var waitStatus syscall.WaitStatus
+	if err := cmd.Run(); err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			waitStatus = exitError.Sys().(syscall.WaitStatus)
+			return waitStatus.ExitStatus()
+		} else {
+			panic(err)
+		}
+	}
+
+	return 0
+}
+
+func (m *Mock) PassthroughToLocalCommand() *Mock {
+	path, err := exec.LookPath(m.Name)
+	if err != nil {
+		panic(err)
+	}
+
+	m.passthroughPath = path
+	return m
 }
 
 // Expect creates an expectation that the mock will be called with the provided args
@@ -237,21 +279,42 @@ func (a Arguments) Match(x ...string) (bool, string) {
 }
 
 func (a Arguments) String() string {
-	return fmt.Sprintf("%v", a)
+	var s = make([]string, len(a))
+	for idx := range a {
+		// log.Printf("#%d %T %#v", idx, a[idx], a[idx])
+		switch t := a[idx].(type) {
+		case string:
+			s[idx] = fmt.Sprintf("%q", t)
+		case fmt.Stringer:
+			s[idx] = fmt.Sprintf("%s", t.String())
+		default:
+			s[idx] = fmt.Sprintf("%v", t)
+		}
+	}
+	return strings.Join(s, " ")
 }
 
 type Matcher interface {
+	fmt.Stringer
 	Match(s string) (bool, string)
 }
 
-type MatcherFunc func(s string) (bool, string)
+type MatcherFunc struct {
+	f   func(s string) (bool, string)
+	str string
+}
 
 func (mf MatcherFunc) Match(s string) (bool, string) {
-	return mf(s)
+	return mf.f(s)
+}
+
+func (mf MatcherFunc) String() string {
+	return mf.str
 }
 
 func MatchAny() Matcher {
-	return MatcherFunc(func(s string) (bool, string) {
-		return true, ""
-	})
+	return MatcherFunc{
+		f:   func(s string) (bool, string) { return true, "" },
+		str: "*",
+	}
 }

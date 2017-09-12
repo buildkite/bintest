@@ -48,6 +48,28 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 	}
 }
 
+func TestMockWithPassthroughToLocalCommand(t *testing.T) {
+	m, err := mock.New("echo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.PassthroughToLocalCommand()
+	m.Expect("hello", "world")
+
+	out, err := exec.Command(m.Path, "hello", "world").CombinedOutput()
+	if err != nil {
+		t.Logf("Output: %s", out)
+		t.Fatal(err)
+	}
+
+	if string(out) != "hello world\n" {
+		t.Fatalf("Unexpected output %q", out)
+	}
+
+	m.AssertExpectations(t)
+}
+
 func TestArgumentsThatDontMatch(t *testing.T) {
 	var testCases = []struct {
 		expected mock.Arguments
@@ -90,6 +112,29 @@ func TestArgumentsThatMatch(t *testing.T) {
 		match, _ := test.expected.Match(test.actual...)
 		if !match {
 			t.Fatalf("Expected %v and %v to match", test.expected, test.actual)
+		}
+	}
+}
+
+func TestArgumentsToString(t *testing.T) {
+	var testCases = []struct {
+		args     mock.Arguments
+		expected string
+	}{
+		{
+			mock.Arguments{"test", "llamas", "rock"},
+			`"test" "llamas" "rock"`,
+		},
+		{
+			mock.Arguments{"test", "llamas", mock.MatchAny()},
+			`"test" "llamas" *`,
+		},
+	}
+
+	for _, test := range testCases {
+		actual := test.args.String()
+		if actual != test.expected {
+			t.Fatalf("Expected [%s], got [%s]", test.expected, actual)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -227,6 +228,47 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 func TestProxyCloseRemovesFile(t *testing.T) {
 	proxy, err := binproxy.New("test")
 	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = os.Stat(proxy.Path); os.IsNotExist(err) {
+		t.Fatalf("%s doesn't exist: %v", proxy.Path, err)
+	}
+
+	err = proxy.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = os.Stat(proxy.Path); os.IsExist(err) {
+		t.Fatalf("%s still exists, but shouldn't", proxy.Path)
+	}
+}
+
+func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "binproxy-wd-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	proxy, err := binproxy.New("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Dir = tempDir
+	cmd.Start()
+
+	call := <-proxy.Ch
+	dir := strings.TrimPrefix(call.Dir, "/private")
+	if dir != tempDir {
+		t.Fatalf("Expected call dir to be %q, got %q", tempDir, dir)
+	}
+	call.Exit(0)
+
+	// wait for the command to finish
+	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
 
