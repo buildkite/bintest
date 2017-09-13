@@ -18,7 +18,7 @@ func TestCallingMockWithNoExpectationsSet(t *testing.T) {
 		t.Errorf("Expected a failure without any expectations set")
 	}
 
-	if m.AssertExpectations(t) == false {
+	if m.Check(t) == false {
 		t.Errorf("Assertions should have passed (there were none)")
 	}
 }
@@ -43,7 +43,7 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 		t.Fatalf("Unexpected output %q", out)
 	}
 
-	if m.AssertExpectations(t) == false {
+	if m.Check(t) == false {
 		t.Errorf("Assertions should have passed")
 	}
 }
@@ -67,7 +67,7 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 		t.Fatalf("Unexpected output %q", out)
 	}
 
-	m.AssertExpectations(t)
+	m.Check(t)
 }
 
 func TestArgumentsThatDontMatch(t *testing.T) {

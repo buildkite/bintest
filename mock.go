@@ -2,6 +2,7 @@ package bintest
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -39,6 +40,8 @@ type Mock struct {
 
 	// A command to passthrough execution to
 	passthroughPath string
+
+	t *testing.T
 }
 
 // Mock returns a new Mock instance, or fails if the bintest fails to compile
@@ -66,15 +69,23 @@ func (m *Mock) invoke(call *proxy.Call) {
 	m.Lock()
 	defer m.Unlock()
 
+	var invocation = Invocation{
+		Args: call.Args,
+		Env:  call.Env,
+	}
+
 	expected := m.findExpectedCall(call.Args...)
 	if expected == nil {
-		fmt.Fprintf(call.Stderr, "Failed to find an expectation that matches %v", call.Args)
+		m.invocations = append(m.invocations, invocation)
+		fmt.Fprintf(call.Stderr, "\033[31m🚨 Unexpected call: %s %s\033[0m", m.Name, formatStrings(call.Args))
 		call.Exit(1)
 		return
 	}
 
 	expected.Lock()
 	defer expected.Unlock()
+
+	invocation.Expectation = expected
 
 	if m.passthroughPath == "" {
 		_, _ = io.Copy(call.Stdout, expected.writeStdout)
@@ -85,11 +96,7 @@ func (m *Mock) invoke(call *proxy.Call) {
 	}
 
 	expected.totalCalls++
-
-	m.invocations = append(m.invocations, Invocation{
-		Args: call.Args,
-		Env:  call.Env,
-	})
+	m.invocations = append(m.invocations, invocation)
 }
 
 func (m *Mock) invokePassthrough(call *proxy.Call) int {
@@ -148,7 +155,15 @@ func (m *Mock) findExpectedCall(args ...string) *Expectation {
 	return nil
 }
 
-func (m *Mock) AssertExpectations(t *testing.T) bool {
+// ExpectAll is a shortcut for adding lots of expectations
+func (m *Mock) ExpectAll(argSlices [][]interface{}) {
+	for _, args := range argSlices {
+		m.Expect(args...)
+	}
+}
+
+// Check that all assertions are met and that there aren't invocations that don't match expectations
+func (m *Mock) Check(t *testing.T) bool {
 	m.Lock()
 	defer m.Unlock()
 
@@ -156,24 +171,40 @@ func (m *Mock) AssertExpectations(t *testing.T) bool {
 		return true
 	}
 
-	var somethingMissing bool
-	var failedExpectations int
+	var failedExpectations, unexpectedInvocations int
 
+	// first check that everything we expect
 	for _, expected := range m.expected {
 		if !m.wasCalled(expected.arguments) {
-			t.Logf("\u274C\t%s(%s)", m.Name, expected.arguments.String())
-			somethingMissing = true
+			t.Logf("Expected %s %s to be called", m.Name,
+				expected.arguments.String(),
+			)
 			failedExpectations++
 		}
 	}
 
-	if somethingMissing {
+	if failedExpectations > 0 {
 		t.Errorf("Not all expectations were met (%d out of %d)",
 			len(m.expected)-failedExpectations,
 			len(m.expected))
 	}
 
-	return !somethingMissing
+	// next check if we have invocations without expectations
+	for _, invocation := range m.invocations {
+		if invocation.Expectation == nil {
+			t.Logf("Unexpected call to %s %s",
+				m.Name, formatStrings(invocation.Args))
+			unexpectedInvocations++
+		}
+	}
+
+	if unexpectedInvocations > 0 {
+		t.Errorf("More invocations than expected (%d vs %d)",
+			unexpectedInvocations,
+			len(m.invocations))
+	}
+
+	return unexpectedInvocations == 0 && failedExpectations == 0
 }
 
 func (m *Mock) wasCalled(args Arguments) bool {
@@ -183,6 +214,20 @@ func (m *Mock) wasCalled(args Arguments) bool {
 		}
 	}
 	return false
+}
+
+func (m *Mock) CheckAndClose(t *testing.T) error {
+	if err := m.proxy.Close(); err != nil {
+		return err
+	}
+	if !m.Check(t) {
+		return errors.New("Assertion checks failed")
+	}
+	return nil
+}
+
+func (m *Mock) Close() error {
+	return m.proxy.Close()
 }
 
 // Expectation is used for setting expectations
@@ -243,8 +288,9 @@ func ArgumentsFromStrings(s []string) Arguments {
 
 // Invocation is a call to the binary
 type Invocation struct {
-	Args []string
-	Env  []string
+	Args        []string
+	Env         []string
+	Expectation *Expectation
 }
 
 type Arguments []interface{}
@@ -279,19 +325,7 @@ func (a Arguments) Match(x ...string) (bool, string) {
 }
 
 func (a Arguments) String() string {
-	var s = make([]string, len(a))
-	for idx := range a {
-		// log.Printf("#%d %T %#v", idx, a[idx], a[idx])
-		switch t := a[idx].(type) {
-		case string:
-			s[idx] = fmt.Sprintf("%q", t)
-		case fmt.Stringer:
-			s[idx] = fmt.Sprintf("%s", t.String())
-		default:
-			s[idx] = fmt.Sprintf("%v", t)
-		}
-	}
-	return strings.Join(s, " ")
+	return formatInterfaces(a)
 }
 
 type Matcher interface {
@@ -317,4 +351,27 @@ func MatchAny() Matcher {
 		f:   func(s string) (bool, string) { return true, "" },
 		str: "*",
 	}
+}
+
+func formatStrings(a []string) string {
+	var s = make([]string, len(a))
+	for idx := range a {
+		s[idx] = fmt.Sprintf("%q", a[idx])
+	}
+	return strings.Join(s, " ")
+}
+
+func formatInterfaces(a []interface{}) string {
+	var s = make([]string, len(a))
+	for idx := range a {
+		switch t := a[idx].(type) {
+		case string:
+			s[idx] = fmt.Sprintf("%q", t)
+		case fmt.Stringer:
+			s[idx] = fmt.Sprintf("%s", t.String())
+		default:
+			s[idx] = fmt.Sprintf("%v", t)
+		}
+	}
+	return strings.Join(s, " ")
 }
