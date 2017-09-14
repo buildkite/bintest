@@ -3,9 +3,11 @@ package bintest_test
 import (
 	"fmt"
 	"os/exec"
+	"reflect"
 	"testing"
 
 	"github.com/lox/bintest"
+	"github.com/lox/bintest/proxy"
 )
 
 type testingT struct {
@@ -85,9 +87,9 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 		t.Fatalf("Unexpected output %q", out)
 	}
 
-	mt := &testingT{}
-
-	m.Check(mt)
+	if m.Check(&testingT{}) == false {
+		t.Errorf("Assertions should have passed")
+	}
 }
 
 func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
@@ -126,5 +128,34 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 				t.Errorf("Assertions should have passed")
 			}
 		})
+	}
+}
+
+func TestMockWithCallFunc(t *testing.T) {
+	m, err := bintest.NewMock("echo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.Expect("hello", "world").AndCallFunc(func(c *proxy.Call) {
+		if !reflect.DeepEqual(c.Args, []string{"hello", "world"}) {
+			t.Errorf("Unexpected args: %v", c.Args)
+		}
+		fmt.Fprintf(c.Stdout, "hello world\n")
+		c.Exit(0)
+	})
+
+	out, err := exec.Command(m.Path, "hello", "world").CombinedOutput()
+	if err != nil {
+		t.Logf("Output: %s", out)
+		t.Fatal(err)
+	}
+
+	if string(out) != "hello world\n" {
+		t.Fatalf("Unexpected output %q", out)
+	}
+
+	if m.Check(&testingT{}) == false {
+		t.Errorf("Assertions should have passed")
 	}
 }
