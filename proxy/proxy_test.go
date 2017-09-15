@@ -26,11 +26,12 @@ func ExampleNew() {
 	// call the proxy like a normal binary in the background
 	cmd := exec.Command(p.Path)
 	cmd.Stdout = os.Stdout
+	cmd.Env = []string{`MY_MESSAGE=Llama party! 🎉`}
 	cmd.Start()
 
 	// handle invocations of the proxy binary
 	call := <-p.Ch
-	fmt.Fprintln(call.Stdout, "Llama party! 🎉")
+	fmt.Fprintln(call.Stdout, call.GetEnv(`MY_MESSAGE`))
 	call.Exit(0)
 
 	// wait for the command to finish
