@@ -2,7 +2,6 @@ package bintest_test
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"reflect"
 	"testing"
@@ -122,9 +121,6 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 }
 
 func TestMockWithPassthroughToLocalCommand(t *testing.T) {
-	// bintest.Debug = true
-	// proxy.Debug = true
-
 	m, err := bintest.NewMock("echo")
 	if err != nil {
 		t.Fatal(err)
@@ -133,16 +129,17 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 	m.PassthroughToLocalCommand()
 	m.Expect("hello", "world")
 
-	cmd := exec.Command(m.Path, "hello", "world")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err = cmd.Run(); err != nil {
+	out, err := exec.Command(m.Path, "hello", "world").CombinedOutput()
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	if m.Check(&testingT{}) == false {
 		t.Errorf("Assertions should have passed")
+	}
+
+	if string(out) != "hello world\n" {
+		t.Fatalf("Unexpected output %q", out)
 	}
 }
 
