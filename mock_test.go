@@ -2,6 +2,7 @@ package bintest_test
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"reflect"
 	"testing"
@@ -21,6 +22,58 @@ func (t *testingT) Logf(format string, args ...interface{}) {
 
 func (t *testingT) Errorf(format string, args ...interface{}) {
 	t.Errors = append(t.Errors, fmt.Sprintf(format, args...))
+}
+
+func TestCallingMockWithStdErrExpected(t *testing.T) {
+	m, err := bintest.NewMock("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	m.Expect("blargh").AndWriteToStderr("llamas").AndExitWith(0)
+
+	out, err := exec.Command(m.Path, "blargh").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := &testingT{}
+
+	if m.Check(mt) == false {
+		t.Errorf("Assertions should have passed")
+	}
+
+	if string(out) != "llamas" {
+		t.Fatalf("Expected llamas, got %q", out)
+
+	}
+}
+
+func TestCallingMockWithStdOutExpected(t *testing.T) {
+	m, err := bintest.NewMock("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	m.Expect("blargh").AndWriteToStdout("llamas").AndExitWith(0)
+
+	out, err := exec.Command(m.Path, "blargh").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := &testingT{}
+
+	if m.Check(mt) == false {
+		t.Errorf("Assertions should have passed")
+	}
+
+	if string(out) != "llamas" {
+		t.Fatalf("Expected llamas, got %q", out)
+
+	}
 }
 
 func TestCallingMockWithNoExpectationsSet(t *testing.T) {
@@ -69,6 +122,9 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 }
 
 func TestMockWithPassthroughToLocalCommand(t *testing.T) {
+	// bintest.Debug = true
+	// proxy.Debug = true
+
 	m, err := bintest.NewMock("echo")
 	if err != nil {
 		t.Fatal(err)
@@ -77,14 +133,12 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 	m.PassthroughToLocalCommand()
 	m.Expect("hello", "world")
 
-	out, err := exec.Command(m.Path, "hello", "world").CombinedOutput()
-	if err != nil {
-		t.Logf("Output: %s", out)
-		t.Fatal(err)
-	}
+	cmd := exec.Command(m.Path, "hello", "world")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	if string(out) != "hello world\n" {
-		t.Fatalf("Unexpected output %q", out)
+	if err = cmd.Run(); err != nil {
+		t.Fatal(err)
 	}
 
 	if m.Check(&testingT{}) == false {

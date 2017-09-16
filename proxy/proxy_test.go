@@ -22,6 +22,7 @@ func ExampleNew() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer p.Close()
 
 	// call the proxy like a normal binary in the background
 	cmd := exec.Command(p.Path)
@@ -45,6 +46,7 @@ func TestProxyWithStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer proxy.Close()
 
 	stdout := &bytes.Buffer{}
 
@@ -73,6 +75,7 @@ func TestProxyWithStdout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer proxy.Close()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Start()
@@ -92,6 +95,7 @@ func TestProxyWithStderr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer proxy.Close()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Start()
@@ -111,6 +115,7 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer proxy.Close()
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -176,6 +181,7 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer proxy.Close()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Stdout = actual
@@ -205,6 +211,7 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer proxy.Close()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Start()
@@ -257,6 +264,8 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer proxy.Close()
+
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Dir = tempDir
 	cmd.Start()
@@ -271,18 +280,5 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	// wait for the command to finish
 	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
-	}
-
-	if _, err = os.Stat(proxy.Path); os.IsNotExist(err) {
-		t.Fatalf("%s doesn't exist: %v", proxy.Path, err)
-	}
-
-	err = proxy.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err = os.Stat(proxy.Path); os.IsExist(err) {
-		t.Fatalf("%s still exists, but shouldn't", proxy.Path)
 	}
 }
