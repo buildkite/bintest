@@ -162,11 +162,12 @@ func (m *Mock) Expect(args ...interface{}) *Expectation {
 	m.Lock()
 	defer m.Unlock()
 	ex := &Expectation{
-		parent:        m,
-		arguments:     Arguments(args),
-		writeStderr:   &bytes.Buffer{},
-		writeStdout:   &bytes.Buffer{},
-		expectedCalls: 1,
+		parent:          m,
+		arguments:       Arguments(args),
+		writeStderr:     &bytes.Buffer{},
+		writeStdout:     &bytes.Buffer{},
+		expectedCalls:   1,
+		passthroughPath: m.passthroughPath,
 	}
 	m.expected = append(m.expected, ex)
 	return ex
@@ -328,6 +329,7 @@ func (e *Expectation) AndExitWith(code int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
 	e.exitCode = code
+	e.passthroughPath = ""
 	return e
 }
 
@@ -335,6 +337,7 @@ func (e *Expectation) AndWriteToStdout(s string) *Expectation {
 	e.Lock()
 	defer e.Unlock()
 	e.writeStdout.WriteString(s)
+	e.passthroughPath = ""
 	return e
 }
 
@@ -342,6 +345,7 @@ func (e *Expectation) AndWriteToStderr(s string) *Expectation {
 	e.Lock()
 	defer e.Unlock()
 	e.writeStderr.WriteString(s)
+	e.passthroughPath = ""
 	return e
 }
 
@@ -356,6 +360,7 @@ func (e *Expectation) AndCallFunc(f func(*proxy.Call)) *Expectation {
 	e.Lock()
 	defer e.Unlock()
 	e.callFunc = f
+	e.passthroughPath = ""
 	return e
 }
 
