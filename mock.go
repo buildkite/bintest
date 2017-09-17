@@ -82,7 +82,7 @@ func (m *Mock) invoke(call *proxy.Call) {
 	expected, err := m.findMatchingExpectation(call.Args...)
 	if err != nil {
 		m.invocations = append(m.invocations, invocation)
-		fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %v\033[0m", err)
+		fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %v\033[0m\n", err)
 		call.Exit(1)
 		return
 	}
