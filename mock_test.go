@@ -210,3 +210,26 @@ func TestMockWithCallFunc(t *testing.T) {
 		t.Errorf("Assertions should have passed")
 	}
 }
+
+func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
+	m, err := bintest.NewMock("llamas")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.IgnoreUnexpectedInvocations()
+	m.Expect("first", "call").Once()
+	m.Expect("third", "call").Once()
+	m.Expect("fifth", "call").Once()
+	m.Expect("seventh", "call").NotCalled()
+
+	_ = exec.Command(m.Path, "first", "call").Run()
+	_ = exec.Command(m.Path, "second", "call").Run()
+	_ = exec.Command(m.Path, "third", "call").Run()
+	_ = exec.Command(m.Path, "fourth", "call").Run()
+	_ = exec.Command(m.Path, "fifth", "call").Run()
+
+	if m.Check(&testingT{}) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}
