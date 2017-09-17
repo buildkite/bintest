@@ -83,7 +83,7 @@ func dataClientGo() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/client.go", size: 3033, mode: os.FileMode(420), modTime: time.Unix(1505521439, 0)}
+	info := bindataFileInfo{name: "data/client.go", size: 3033, mode: os.FileMode(420), modTime: time.Unix(1505685465, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
