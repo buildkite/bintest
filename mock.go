@@ -446,7 +446,7 @@ func ExpectEnv(t *testing.T, environ []string, expect ...string) error {
 			return err
 		}
 		if actual != pair[1] {
-			err := fmt.Errorf("Expected %s, got %q", e, pair[1])
+			err := fmt.Errorf("Expected %s, got %q", e, actual)
 			t.Error(err)
 			return err
 		}
