@@ -145,13 +145,15 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 
 func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 	var testCases = []struct {
-		label string
-		n     int
+		label    string
+		n        int
+		min, max int
 	}{
-		{"Zero", 0},
-		{"Once", 1},
-		{"Twice", 2},
-		{"Infinite", bintest.InfiniteTimes},
+		{"Zero", 0, 0, 0},
+		{"Once", 1, 1, 1},
+		{"Twice", 2, 2, 2},
+		{"Infinite", 10, 10, bintest.InfiniteTimes},
+		{"MinInfinite", 10, bintest.InfiniteTimes, bintest.InfiniteTimes},
 	}
 
 	for _, tc := range testCases {
@@ -162,7 +164,7 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 			}
 			defer m.Close()
 
-			m.Expect("test").Times(tc.n)
+			m.Expect("test").MinTimes(tc.min).MaxTimes(tc.max)
 			var failures int
 
 			for c := 0; c < tc.n; c++ {
@@ -230,6 +232,23 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 	_ = exec.Command(m.Path, "fifth", "call").Run()
 
 	if m.Check(&testingT{}) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}
+
+func TestMockOptionally(t *testing.T) {
+	m, err := bintest.NewMock("llamas")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.Expect("first", "call").Optionally()
+	m.Expect("third", "call").Once()
+
+	_ = exec.Command(m.Path, "first", "call").Run()
+	_ = exec.Command(m.Path, "third", "call").Run()
+
+	if m.Check(t) == false {
 		t.Errorf("Assertions should have passed")
 	}
 }

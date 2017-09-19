@@ -8,8 +8,10 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
+	"testing"
 
 	"github.com/lox/bintest/proxy"
 )
@@ -39,6 +41,9 @@ type Mock struct {
 
 	// The executions expected of the binary
 	expected []*Expectation
+
+	// A list of middleware functions to call before invocation
+	before []func(i Invocation) error
 
 	// Whether to ignore unexpected calls
 	ignoreUnexpected bool
@@ -80,6 +85,14 @@ func (m *Mock) invoke(call *proxy.Call) {
 	var invocation = Invocation{
 		Args: call.Args,
 		Env:  call.Env,
+	}
+
+	for _, beforeFunc := range m.before {
+		if err := beforeFunc(invocation); err != nil {
+			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %v\033[0m\n", err)
+			call.Exit(1)
+			return
+		}
 	}
 
 	expected, err := m.findMatchingExpectation(call.Args...)
@@ -143,17 +156,35 @@ func (m *Mock) invokePassthrough(path string, call *proxy.Call) int {
 // the result as the result of the mock. Useful for assertions that commands happen, but where
 // you want the command to actually be executed.
 func (m *Mock) PassthroughToLocalCommand() *Mock {
+	m.Lock()
+	defer m.Unlock()
 	path, err := exec.LookPath(m.Name)
 	if err != nil {
 		panic(err)
 	}
-
+	m.ignoreUnexpected = true
 	m.passthroughPath = path
 	return m
 }
 
+// IgnoreUnexpectedInvocations allows for invocations without matching call expectations
+// to just silently return 0 and no output
 func (m *Mock) IgnoreUnexpectedInvocations() *Mock {
+	m.Lock()
+	defer m.Unlock()
 	m.ignoreUnexpected = true
+	return m
+}
+
+// Before adds a middleware that is run before the Invocation is dispatched
+func (m *Mock) Before(f func(i Invocation) error) *Mock {
+	m.Lock()
+	defer m.Unlock()
+	if m.before == nil {
+		m.before = []func(i Invocation) error{f}
+	} else {
+		m.before = append(m.before, f)
+	}
 	return m
 }
 
@@ -162,12 +193,13 @@ func (m *Mock) Expect(args ...interface{}) *Expectation {
 	m.Lock()
 	defer m.Unlock()
 	ex := &Expectation{
-		parent:          m,
-		arguments:       Arguments(args),
-		writeStderr:     &bytes.Buffer{},
-		writeStdout:     &bytes.Buffer{},
-		expectedCalls:   1,
-		passthroughPath: m.passthroughPath,
+		parent:           m,
+		arguments:        Arguments(args),
+		writeStderr:      &bytes.Buffer{},
+		writeStdout:      &bytes.Buffer{},
+		expectedCallsMin: 1,
+		expectedCallsMax: 1,
+		passthroughPath:  m.passthroughPath,
 	}
 	m.expected = append(m.expected, ex)
 	return ex
@@ -190,7 +222,7 @@ func (m *Mock) findMatchingExpectation(args ...string) (*Expectation, error) {
 	// log.Printf("Found %d possible matches for [%s %s]", len(possibleMatches), m.Name, formatStrings(args))
 
 	for _, expectation := range possibleMatches {
-		if expectation.expectedCalls == InfiniteTimes || expectation.totalCalls < expectation.expectedCalls {
+		if expectation.expectedCallsMax == InfiniteTimes || expectation.totalCalls < expectation.expectedCallsMax {
 			// log.Printf("Matched %v", expectation)
 			return expectation, nil
 		}
@@ -224,9 +256,15 @@ func (m *Mock) Check(t TestingT) bool {
 
 	// first check that everything we expect
 	for _, expected := range m.expected {
-		if expected.expectedCalls > 0 && !m.wasCalled(expected.arguments) {
-			t.Logf("Expected %s %s to be called", m.Name,
-				expected.arguments.String(),
+		count := m.countCalls(expected.arguments)
+		if expected.expectedCallsMin != InfiniteTimes && count < expected.expectedCallsMin {
+			t.Logf("Expected %s %s to be called at least %d times, got %d",
+				m.Name, expected.arguments.String(), expected.expectedCallsMin, count,
+			)
+			failedExpectations++
+		} else if expected.expectedCallsMax != InfiniteTimes && count > expected.expectedCallsMax {
+			t.Logf("Expected %s %s to be called at most %d times, got %d",
+				m.Name, expected.arguments.String(), expected.expectedCallsMax, count,
 			)
 			failedExpectations++
 		}
@@ -258,13 +296,13 @@ func (m *Mock) Check(t TestingT) bool {
 	return unexpectedInvocations == 0 && failedExpectations == 0
 }
 
-func (m *Mock) wasCalled(args Arguments) bool {
+func (m *Mock) countCalls(args Arguments) (count int) {
 	for _, invocation := range m.invocations {
 		if match, _ := args.Match(invocation.Args...); match {
-			return true
+			count++
 		}
 	}
-	return false
+	return count
 }
 
 func (m *Mock) CheckAndClose(t TestingT) error {
@@ -303,17 +341,38 @@ type Expectation struct {
 	// Amount of times this call has been called
 	totalCalls int
 
-	// Amount of times this is expected to be called
-	expectedCalls int
+	// Times expected to be called
+	expectedCallsMin, expectedCallsMax int
 
 	// Buffers to copy to stdout and stderr
 	writeStdout, writeStderr *bytes.Buffer
 }
 
-func (e *Expectation) Times(expected int) *Expectation {
+func (e *Expectation) Times(expect int) *Expectation {
+	return e.MinTimes(expect).MaxTimes(expect)
+}
+
+func (e *Expectation) MinTimes(expect int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
-	e.expectedCalls = expected
+	if expect == InfiniteTimes {
+		expect = 0
+	}
+	e.expectedCallsMin = expect
+	return e
+}
+
+func (e *Expectation) MaxTimes(expect int) *Expectation {
+	e.Lock()
+	defer e.Unlock()
+	e.expectedCallsMax = expect
+	return e
+}
+
+func (e *Expectation) Optionally() *Expectation {
+	e.Lock()
+	defer e.Unlock()
+	e.expectedCallsMin = 0
 	return e
 }
 
@@ -373,6 +432,37 @@ type Invocation struct {
 	Args        []string
 	Env         []string
 	Expectation *Expectation
+}
+
+// ExpectEnv asserts that certain environment vars/values exist, otherwise
+// an error is reported to T and a matching error is returned (for Before)
+func (i *Invocation) ExpectEnv(t *testing.T, env ...string) error {
+	for _, e := range env {
+		pair := strings.Split(e, "=")
+		actual, ok := i.GetEnv(pair[0])
+		if !ok {
+			err := fmt.Errorf("Expected %s, %s wasn't set in environment", e, pair[0])
+			t.Error(err)
+			return err
+		}
+		if actual != pair[1] {
+			err := fmt.Errorf("Expected %s, got %q", e, pair[1])
+			t.Error(err)
+			return err
+		}
+	}
+	return nil
+}
+
+// GetEnv returns the value for a given env in the invocation
+func (i *Invocation) GetEnv(key string) (string, bool) {
+	for _, e := range i.Env {
+		pair := strings.Split(e, "=")
+		if strings.ToUpper(pair[0]) == strings.ToUpper(key) {
+			return pair[1], true
+		}
+	}
+	return "", false
 }
 
 var (
