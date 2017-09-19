@@ -8,10 +8,8 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
-	"testing"
 
 	"github.com/lox/bintest/proxy"
 )
@@ -40,7 +38,7 @@ type Mock struct {
 	invocations []Invocation
 
 	// The executions expected of the binary
-	expected []*Expectation
+	expected ExpectationSet
 
 	// A list of middleware functions to call before invocation
 	before []func(i Invocation) error
@@ -87,6 +85,7 @@ func (m *Mock) invoke(call *proxy.Call) {
 		Env:  call.Env,
 	}
 
+	// Before we execute any invocations, run the before funcs
 	for _, beforeFunc := range m.before {
 		if err := beforeFunc(invocation); err != nil {
 			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %v\033[0m\n", err)
@@ -95,7 +94,7 @@ func (m *Mock) invoke(call *proxy.Call) {
 		}
 	}
 
-	expected, err := m.findMatchingExpectation(call.Args...)
+	expected, err := m.expected.Match(call.Args...)
 	if err != nil {
 		m.invocations = append(m.invocations, invocation)
 		if m.ignoreUnexpected {
@@ -107,8 +106,7 @@ func (m *Mock) invoke(call *proxy.Call) {
 		return
 	}
 
-	expected.Lock()
-	defer expected.Unlock()
+	debugf("Found expectation: %s", expected)
 
 	invocation.Expectation = expected
 
@@ -124,7 +122,9 @@ func (m *Mock) invoke(call *proxy.Call) {
 		call.Exit(expected.exitCode)
 	}
 
+	debugf("Incrementing total call of expected from %d to %d", expected.totalCalls, expected.totalCalls+1)
 	expected.totalCalls++
+
 	m.invocations = append(m.invocations, invocation)
 }
 
@@ -193,47 +193,18 @@ func (m *Mock) Expect(args ...interface{}) *Expectation {
 	m.Lock()
 	defer m.Unlock()
 	ex := &Expectation{
-		parent:           m,
-		arguments:        Arguments(args),
-		writeStderr:      &bytes.Buffer{},
-		writeStdout:      &bytes.Buffer{},
-		expectedCallsMin: 1,
-		expectedCallsMax: 1,
-		passthroughPath:  m.passthroughPath,
+		name:            m.Name,
+		sequence:        len(m.expected) + 1,
+		arguments:       Arguments(args),
+		writeStderr:     &bytes.Buffer{},
+		writeStdout:     &bytes.Buffer{},
+		minCalls:        1,
+		maxCalls:        1,
+		passthroughPath: m.passthroughPath,
 	}
+	debugf("creating expectaion %s", ex)
 	m.expected = append(m.expected, ex)
 	return ex
-}
-
-func (m *Mock) findMatchingExpectation(args ...string) (*Expectation, error) {
-	var possibleMatches = []*Expectation{}
-
-	// log.Printf("Trying to match call [%s %s]", m.Name, formatStrings(args))
-	for _, expectation := range m.expected {
-		expectation.RLock()
-		defer expectation.RUnlock()
-		// log.Printf("Comparing to [%s]", expectation.String())
-		if match, _ := expectation.arguments.Match(args...); match {
-			// log.Printf("Matched args")
-			possibleMatches = append(possibleMatches, expectation)
-		}
-	}
-
-	// log.Printf("Found %d possible matches for [%s %s]", len(possibleMatches), m.Name, formatStrings(args))
-
-	for _, expectation := range possibleMatches {
-		if expectation.expectedCallsMax == InfiniteTimes || expectation.totalCalls < expectation.expectedCallsMax {
-			// log.Printf("Matched %v", expectation)
-			return expectation, nil
-		}
-	}
-
-	if len(possibleMatches) > 0 {
-		return nil, fmt.Errorf("Call count didn't match possible expectations for [%s %s]", m.Name, formatStrings(args))
-	}
-
-	// log.Printf("No match found")
-	return nil, fmt.Errorf("No matching expectation found for [%s %s]", m.Name, formatStrings(args))
 }
 
 // ExpectAll is a shortcut for adding lots of expectations
@@ -256,16 +227,7 @@ func (m *Mock) Check(t TestingT) bool {
 
 	// first check that everything we expect
 	for _, expected := range m.expected {
-		count := m.countCalls(expected.arguments)
-		if expected.expectedCallsMin != InfiniteTimes && count < expected.expectedCallsMin {
-			t.Logf("Expected %s %s to be called at least %d times, got %d",
-				m.Name, expected.arguments.String(), expected.expectedCallsMin, count,
-			)
-			failedExpectations++
-		} else if expected.expectedCallsMax != InfiniteTimes && count > expected.expectedCallsMax {
-			t.Logf("Expected %s %s to be called at most %d times, got %d",
-				m.Name, expected.arguments.String(), expected.expectedCallsMax, count,
-			)
+		if !expected.Check(t) {
 			failedExpectations++
 		}
 	}
@@ -281,7 +243,7 @@ func (m *Mock) Check(t TestingT) bool {
 		for _, invocation := range m.invocations {
 			if invocation.Expectation == nil {
 				t.Logf("Unexpected call to %s %s",
-					m.Name, formatStrings(invocation.Args))
+					m.Name, FormatStrings(invocation.Args))
 				unexpectedInvocations++
 			}
 		}
@@ -294,15 +256,6 @@ func (m *Mock) Check(t TestingT) bool {
 	}
 
 	return unexpectedInvocations == 0 && failedExpectations == 0
-}
-
-func (m *Mock) countCalls(args Arguments) (count int) {
-	for _, invocation := range m.invocations {
-		if match, _ := args.Match(invocation.Args...); match {
-			count++
-		}
-	}
-	return count
 }
 
 func (m *Mock) CheckAndClose(t TestingT) error {
@@ -320,149 +273,11 @@ func (m *Mock) Close() error {
 	return m.proxy.Close()
 }
 
-// Expectation is used for setting expectations
-type Expectation struct {
-	sync.RWMutex
-
-	parent *Mock
-
-	// Holds the arguments of the method.
-	arguments Arguments
-
-	// The exit code to return
-	exitCode int
-
-	// The command to execute and return the results of
-	passthroughPath string
-
-	// The function to call when executed
-	callFunc func(*proxy.Call)
-
-	// Amount of times this call has been called
-	totalCalls int
-
-	// Times expected to be called
-	expectedCallsMin, expectedCallsMax int
-
-	// Buffers to copy to stdout and stderr
-	writeStdout, writeStderr *bytes.Buffer
-}
-
-func (e *Expectation) Times(expect int) *Expectation {
-	return e.MinTimes(expect).MaxTimes(expect)
-}
-
-func (e *Expectation) MinTimes(expect int) *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	if expect == InfiniteTimes {
-		expect = 0
-	}
-	e.expectedCallsMin = expect
-	return e
-}
-
-func (e *Expectation) MaxTimes(expect int) *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	e.expectedCallsMax = expect
-	return e
-}
-
-func (e *Expectation) Optionally() *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	e.expectedCallsMin = 0
-	return e
-}
-
-func (e *Expectation) Once() *Expectation {
-	return e.Times(1)
-}
-
-func (e *Expectation) NotCalled() *Expectation {
-	return e.Times(0)
-}
-
-func (e *Expectation) AndExitWith(code int) *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	e.exitCode = code
-	e.passthroughPath = ""
-	return e
-}
-
-func (e *Expectation) AndWriteToStdout(s string) *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	e.writeStdout.WriteString(s)
-	e.passthroughPath = ""
-	return e
-}
-
-func (e *Expectation) AndWriteToStderr(s string) *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	e.writeStderr.WriteString(s)
-	e.passthroughPath = ""
-	return e
-}
-
-func (e *Expectation) AndPassthroughToLocalCommand(path string) *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	e.passthroughPath = path
-	return e
-}
-
-func (e *Expectation) AndCallFunc(f func(*proxy.Call)) *Expectation {
-	e.Lock()
-	defer e.Unlock()
-	e.callFunc = f
-	e.passthroughPath = ""
-	return e
-}
-
-func (e *Expectation) String() string {
-	return fmt.Sprintf("%s %s", e.parent.Name, e.arguments.String())
-}
-
 // Invocation is a call to the binary
 type Invocation struct {
 	Args        []string
 	Env         []string
 	Expectation *Expectation
-}
-
-// ExpectEnv asserts that certain environment vars/values exist, otherwise
-// an error is reported to T and a matching error is returned (for Before)
-func ExpectEnv(t *testing.T, environ []string, expect ...string) error {
-	for _, e := range expect {
-		pair := strings.Split(e, "=")
-		actual, ok := GetEnv(pair[0], environ)
-		if !ok {
-			err := fmt.Errorf("Expected %s, %s wasn't set in environment", e, pair[0])
-			t.Error(err)
-			return err
-		}
-		if actual != pair[1] {
-			err := fmt.Errorf("Expected %s, got %q", e, actual)
-			t.Error(err)
-			return err
-		}
-	}
-	return nil
-}
-
-// GetEnv returns the value for a given env in the invocation
-func GetEnv(key string, environ []string) (string, bool) {
-	for _, e := range environ {
-		pair := strings.Split(e, "=")
-		if strings.ToUpper(pair[0]) == strings.ToUpper(key) {
-			return pair[1], true
-		}
-	}
-	return "", false
 }
 
 var (

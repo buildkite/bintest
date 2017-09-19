@@ -252,3 +252,22 @@ func TestMockOptionally(t *testing.T) {
 		t.Errorf("Assertions should have passed")
 	}
 }
+
+func TestMockMultipleExpects(t *testing.T) {
+	m, err := bintest.NewMock("llamas")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.Expect("first", "call")
+	m.Expect("first", "call")
+	m.Expect("first", "call")
+
+	_ = exec.Command(m.Path, "first", "call").Run()
+	_ = exec.Command(m.Path, "first", "call").Run()
+	_ = exec.Command(m.Path, "first", "call").Run()
+
+	if m.Check(t) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}

@@ -47,7 +47,7 @@ func (a Arguments) Match(x ...string) (bool, string) {
 }
 
 func (a Arguments) String() string {
-	return formatInterfaces(a)
+	return FormatInterfaces(a)
 }
 
 type Matcher interface {
@@ -71,19 +71,21 @@ func (mf MatcherFunc) String() string {
 func MatchAny() Matcher {
 	return MatcherFunc{
 		f:   func(s string) (bool, string) { return true, "" },
-		str: "*",
+		str: "bintest.MatchAny()",
 	}
 }
 
-func formatStrings(a []string) string {
+// Prints a slice of strings as quoted arguments
+func FormatStrings(a []string) string {
 	var s = make([]string, len(a))
 	for idx := range a {
 		s[idx] = fmt.Sprintf("%q", a[idx])
 	}
-	return strings.Join(s, " ")
+	return strings.Join(s, ", ")
 }
 
-func formatInterfaces(a []interface{}) string {
+// Prints a slice of interface{} as quoted arguments
+func FormatInterfaces(a []interface{}) string {
 	var s = make([]string, len(a))
 	for idx := range a {
 		switch t := a[idx].(type) {
@@ -95,5 +97,5 @@ func formatInterfaces(a []interface{}) string {
 			s[idx] = fmt.Sprintf("%v", t)
 		}
 	}
-	return strings.Join(s, " ")
+	return strings.Join(s, ", ")
 }

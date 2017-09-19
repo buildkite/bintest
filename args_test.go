@@ -24,7 +24,8 @@ func TestArgumentsThatDontMatch(t *testing.T) {
 	for _, test := range testCases {
 		match, _ := test.expected.Match(test.actual...)
 		if match {
-			t.Fatalf("Expected %v and %v to not match", test.expected, test.actual)
+			t.Fatalf("Expected [%s] and [%s] to NOT match",
+				test.expected, bintest.FormatStrings(test.actual))
 		}
 	}
 }
@@ -47,7 +48,8 @@ func TestArgumentsThatMatch(t *testing.T) {
 	for _, test := range testCases {
 		match, _ := test.expected.Match(test.actual...)
 		if !match {
-			t.Fatalf("Expected %v and %v to match", test.expected, test.actual)
+			t.Fatalf("Expected [%s] and [%s] to match",
+				test.expected, bintest.FormatStrings(test.actual))
 		}
 	}
 }
@@ -59,11 +61,11 @@ func TestArgumentsToString(t *testing.T) {
 	}{
 		{
 			bintest.Arguments{"test", "llamas", "rock"},
-			`"test" "llamas" "rock"`,
+			`"test", "llamas", "rock"`,
 		},
 		{
 			bintest.Arguments{"test", "llamas", bintest.MatchAny()},
-			`"test" "llamas" *`,
+			`"test", "llamas", bintest.MatchAny()`,
 		},
 	}
 
