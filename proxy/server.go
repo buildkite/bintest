@@ -1,7 +1,10 @@
 package proxy
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -9,14 +12,43 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
-type server struct {
+type handler struct {
 	sync.Mutex
-	net.Listener
+	proxy        *Proxy
+	callHandlers map[int64]callHandler
+}
 
-	proxy    *Proxy
-	handlers map[int64]callHandler
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	debugf("[http] START %s", r.URL.Path)
+
+	if r.URL.Path == "/" {
+		h.serveInitialCall(w, r)
+		return
+	}
+
+	id, err := strconv.ParseInt(strings.TrimPrefix(path.Dir(r.URL.Path), "/"), 10, 64)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	ch, ok := h.callHandlers[id]
+	if !ok {
+		http.Error(w, "Unknown handler", http.StatusNotFound)
+		return
+	}
+
+	ch.ServeHTTP(w, r)
+	debugf("[http] END %s", r.URL.Path)
+}
+
+type server struct {
+	Addr            string
+	certPEM, keyPEM []byte
+	*http.Server
 }
 
 type serverRequest struct {
@@ -29,7 +61,7 @@ type serverResponse struct {
 	ID int64
 }
 
-func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
+func (h *handler) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	var req serverRequest
 
 	// parse the posted args end env
@@ -38,7 +70,7 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.Lock()
+	h.Lock()
 
 	// these pipes connect the call to the various http request/responses
 	outR, outW := io.Pipe()
@@ -46,51 +78,27 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	inR, inW := io.Pipe()
 
 	// create a custom handler with the id for subsequent requests to hit
-	call := s.proxy.newCall(req.Args, req.Env, req.Dir)
+	call := h.proxy.newCall(req.Args, req.Env, req.Dir)
 	call.Stdout = outW
 	call.Stderr = errW
 	call.Stdin = inR
 
-	s.handlers[call.ID] = callHandler{
+	h.callHandlers[call.ID] = callHandler{
 		call:   call,
 		stdout: outR,
 		stderr: errR,
 		stdin:  inW,
 	}
 
-	s.Unlock()
+	h.Unlock()
 
 	// dispatch to whatever handles the call
-	s.proxy.Ch <- call
+	h.proxy.Ch <- call
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(&serverResponse{
 		ID: call.ID,
 	})
-}
-
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	debugf("[http] START %s", r.URL.Path)
-
-	if r.URL.Path == "/" {
-		s.serveInitialCall(w, r)
-		return
-	}
-
-	id, err := strconv.ParseInt(strings.TrimPrefix(path.Dir(r.URL.Path), "/"), 10, 64)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	ch, ok := s.handlers[id]
-	if !ok {
-		http.Error(w, "Unknown handler", http.StatusNotFound)
-		return
-	}
-
-	ch.ServeHTTP(w, r)
-	debugf("[http] END %s", r.URL.Path)
 }
 
 func startServer(p *Proxy) (*server, error) {
@@ -99,14 +107,66 @@ func startServer(p *Proxy) (*server, error) {
 		return nil, err
 	}
 
-	s := &server{
-		Listener: l,
-		proxy:    p,
-		handlers: map[int64]callHandler{},
+	t := time.Now()
+	certPEMBlock, keyPEMBlock, err := generateCert(l.Addr().String())
+	if err != nil {
+		return nil, err
 	}
 
-	go http.Serve(l, s)
-	return s, nil
+	debugf("Generated TLS certificate for %s in %v", l.Addr().String(), time.Now().Sub(t))
+
+	h := &handler{
+		proxy:        p,
+		callHandlers: map[int64]callHandler{},
+	}
+
+	tlsCert, err := tls.X509KeyPair(certPEMBlock, keyPEMBlock)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to parse TLS certificate: %v", err)
+	}
+
+	clientCertPool := x509.NewCertPool()
+	if !clientCertPool.AppendCertsFromPEM(certPEMBlock) {
+		return nil, fmt.Errorf("Failed to append client certificate")
+	}
+
+	tlsConfig := &tls.Config{
+		// The certificate that we generated
+		Certificates: []tls.Certificate{tlsCert},
+		// Reject any TLS certificate that cannot be validated
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		// Ensure that we only use our "CA" to validate certificates
+		ClientCAs: clientCertPool,
+		// PFS because we can
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		// Force it server side
+		PreferServerCipherSuites: true,
+		// TLS 1.2 because we can
+		MinVersion: tls.VersionTLS12,
+	}
+
+	tlsConfig.BuildNameToCertificate()
+
+	server := &server{
+		Addr: l.Addr().String(),
+		Server: &http.Server{
+			Handler:   h,
+			TLSConfig: tlsConfig,
+		},
+		certPEM: certPEMBlock,
+		keyPEM:  keyPEMBlock,
+	}
+
+	go func() {
+		if err := server.ServeTLS(l, "", ""); err != nil && err != http.ErrServerClosed {
+			debugf("Server finished: %v", err)
+		}
+	}()
+
+	return server, nil
 }
 
 type callHandler struct {

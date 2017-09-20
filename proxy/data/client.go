@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,23 +22,13 @@ func debugf(pattern string, args ...interface{}) {
 }
 
 var (
-	debug  string
-	server string
+	debug           string
+	server          string
+	certPEM, keyPEM string
 )
 
-type request struct {
-	Args []string
-	Env  []string
-	Dir  string
-}
-
-type response struct {
-	ID int64
-}
-
 func main() {
-	u := fmt.Sprintf("http://%s/", server)
-	debugf("Connecting to %s", u)
+	debugf("Connecting to %s", server)
 	defer func() {
 		debugf("Finished process")
 	}()
@@ -45,12 +38,22 @@ func main() {
 		panic(err)
 	}
 
-	resp, err := jsonPost(u, request{
-		Args: os.Args[1:],
-		Env:  os.Environ(),
-		Dir:  wd,
-	})
+	certPEMDecoded, err := base64.StdEncoding.DecodeString(certPEM)
+	if err != nil {
+		panic(err)
+	}
 
+	keyPEMDecoded, err := base64.StdEncoding.DecodeString(keyPEM)
+	if err != nil {
+		panic(err)
+	}
+
+	client, err := newClient(server, certPEMDecoded, keyPEMDecoded)
+	if err != nil {
+		panic(err)
+	}
+
+	err = client.Initialize(os.Args[1:], os.Environ(), wd)
 	if err != nil {
 		panic(err)
 	}
@@ -87,14 +90,7 @@ func main() {
 			w.Close()
 		}
 
-		stdinReq, stdinErr := http.NewRequest("POST", fmt.Sprintf("%s%d/stdin", u, resp.ID), r)
-		if stdinErr != nil {
-			panic(stdinErr)
-		}
-
-		debugf("Posting to /stdin")
-		_, err = http.DefaultClient.Do(stdinReq)
-		if err != nil {
+		if err = client.Stdin(r); err != nil {
 			panic(err)
 		}
 	}()
@@ -102,15 +98,15 @@ func main() {
 	// handle stdout
 	go func() {
 		debugf("Getting /stdout")
-		stdout, stdoutErr := http.Get(fmt.Sprintf("%s%d/stdout", u, resp.ID))
+		stdout, stdoutErr := client.Stdout()
 		if stdoutErr != nil {
 			panic(stdoutErr)
 		}
 
 		go func() {
 			debugf("Copying to Stdout")
-			io.Copy(os.Stdout, stdout.Body)
-			stdout.Body.Close()
+			io.Copy(os.Stdout, stdout)
+			stdout.Close()
 			wg.Done()
 			debugf("Finished copying from Stdout")
 		}()
@@ -119,15 +115,15 @@ func main() {
 	// handle stderr
 	go func() {
 		debugf("Getting /stderr")
-		stderr, stderrErr := http.Get(fmt.Sprintf("%s%d/stderr", u, resp.ID))
+		stderr, stderrErr := client.Stderr()
 		if stderrErr != nil {
 			panic(stderrErr)
 		}
 
 		go func() {
 			debugf("Copying from Stderr")
-			io.Copy(os.Stderr, stderr.Body)
-			stderr.Body.Close()
+			io.Copy(os.Stderr, stderr)
+			stderr.Close()
 			wg.Done()
 			debugf("Finished copying from Stderr")
 		}()
@@ -136,37 +132,114 @@ func main() {
 	debugf("Waiting for streams to finish")
 	wg.Wait()
 
-	exitCodeResp, err := http.Get(fmt.Sprintf("%s%d/exitcode", u, resp.ID))
+	exitCode, err := client.ExitCode()
 	if err != nil {
-		panic(err)
-	}
-
-	var exitCode int
-	if err = json.NewDecoder(exitCodeResp.Body).Decode(&exitCode); err != nil {
 		panic(err)
 	}
 
 	os.Exit(exitCode)
 }
 
-func jsonPost(u string, req request) (*response, error) {
-	body := new(bytes.Buffer)
-	if err := json.NewEncoder(body).Encode(req); err != nil {
-		return nil, err
+type client struct {
+	*http.Client
+	u  string
+	id int64
+}
+
+func newClient(server string, certPEM, keyPEM []byte) (*client, error) {
+	// Load our TLS key pair to use for authentication
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to load cert: %v", err)
 	}
 
-	// Post a JSON document
-	resp, err := http.Post(u, "application/json; charset=utf-8", body)
+	clientCertPool := x509.NewCertPool()
+	clientCertPool.AppendCertsFromPEM(certPEM)
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      clientCertPool,
+	}
+
+	tlsConfig.BuildNameToCertificate()
+
+	return &client{
+		Client: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: tlsConfig,
+			},
+		},
+		u: fmt.Sprintf("https://%s", server),
+	}, nil
+}
+
+func (c *client) Initialize(Args []string, Env []string, Dir string) error {
+	var request = struct {
+		Args []string
+		Env  []string
+		Dir  string
+	}{Args, Env, Dir}
+
+	body := new(bytes.Buffer)
+	if err := json.NewEncoder(body).Encode(request); err != nil {
+		return err
+	}
+
+	httpResponse, err := c.Client.Post(c.u+"/", "application/json; charset=utf-8", body)
+	if err != nil {
+		return err
+	}
+	defer httpResponse.Body.Close()
+
+	var response struct {
+		ID int64
+	}
+	if err = json.NewDecoder(httpResponse.Body).Decode(&response); err != nil {
+		return err
+	}
+
+	c.id = response.ID
+	return nil
+}
+
+func (c *client) Stdin(r io.Reader) error {
+	debugf("Posting to /%d/stdin", c.id)
+	_, err := c.Client.Post(fmt.Sprintf("%s/%d/stdin", c.u, c.id), "application/octet-stream", r)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *client) Stdout() (io.ReadCloser, error) {
+	debugf("Getting /%d/stdout", c.id)
+	resp, err := c.Client.Get(fmt.Sprintf("%s/%d/stdout", c.u, c.id))
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	return resp.Body, nil
+}
 
-	// Receive the body as JSON
-	var decoded response
-	if err = json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+func (c *client) Stderr() (io.ReadCloser, error) {
+	debugf("Getting /%d/stderr", c.id)
+	resp, err := c.Client.Get(fmt.Sprintf("%s/%d/stderr", c.u, c.id))
+	if err != nil {
 		return nil, err
 	}
+	return resp.Body, nil
+}
 
-	return &decoded, nil
+func (c *client) ExitCode() (int, error) {
+	debugf("Getting /%d/exitcode", c.id)
+	exitCodeResp, err := c.Client.Get(fmt.Sprintf("%s/%d/exitcode", c.u, c.id))
+	if err != nil {
+		return 0, err
+	}
+
+	var exitCode int
+	if err = json.NewDecoder(exitCodeResp.Body).Decode(&exitCode); err != nil {
+		return 0, err
+	}
+
+	return exitCode, nil
 }
