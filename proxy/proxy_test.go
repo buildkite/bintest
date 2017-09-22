@@ -240,7 +240,20 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 	}
 
 	if _, err = os.Stat(proxy.Path); os.IsNotExist(err) {
-		t.Fatalf("%s doesn't exist: %v", proxy.Path, err)
+		t.Fatalf("%s doesn't exist, but should: %v", proxy.Path, err)
+	}
+
+	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Start()
+
+	call := <-proxy.Ch
+	call.Exit(0)
+
+	err = cmd.Wait()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	err = proxy.Close()
@@ -280,5 +293,48 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	// wait for the command to finish
 	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func BenchmarkCreatingProxies(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		proxy, err := proxy.New("test")
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer proxy.Close()
+	}
+}
+
+func BenchmarkCallingProxies(b *testing.B) {
+	proxy, err := proxy.New("test")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer proxy.Close()
+
+	var expected string
+	for i := 0; i < 1000; i++ {
+		expected += strings.Repeat("llamas", 10)
+	}
+
+	b.SetBytes(int64(len(expected)))
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		b.StopTimer()
+		cmd := exec.Command(proxy.Path, "test", "arguments")
+		if err = cmd.Start(); err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+
+		call := <-proxy.Ch
+		io.Copy(call.Stdout, strings.NewReader(expected))
+		call.Exit(0)
+
+		b.StopTimer()
+		if err = cmd.Wait(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
