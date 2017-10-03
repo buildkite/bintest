@@ -47,11 +47,11 @@ func TestExplainExpectationMatch(t *testing.T) {
 		{name: "test", arguments: Arguments{"llamas", "rock"}, minCalls: 1, maxCalls: 5},
 	}
 
-	explanation := exp.ForArguments("llamas", "ro").ClosestMatch().Explain()
-	expected := `Args [llamas ro] Didn't match any expectations. Closest was {"name":"test","args":["llamas","rock"],"calls":1,"minCalls":1,"maxCalls":1}, but Argument #2 doesn't match: Differs at character 3, expected "ck", got ""`
+	actual := exp.ForArguments("llamas", "ro").ClosestMatch().Explain()
+	expected := `Argument #2 doesn't match: Differs at character 3, expected "ck", got ""`
 
-	if explanation != expected {
-		t.Fatalf("Wrong explanation")
+	if actual != expected {
+		t.Fatalf("Wrong explanation, got %s, wanted %s", actual, expected)
 	}
 }
 

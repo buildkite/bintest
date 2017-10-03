@@ -192,14 +192,13 @@ func (r ExpectationResultSet) ClosestMatch() ExpectationResult {
 
 // Explain returns an explanation of why the Expectation didn't match
 func (r ExpectationResult) Explain() string {
-	if r.ArgumentsMatchResult.IsMatch && r.CallCountMatch {
-		return fmt.Sprintf("Arguments %v matched %v", r.Arguments, r.Expectation)
+	if !r.ArgumentsMatchResult.IsMatch && !r.CallCountMatch {
+		return r.ArgumentsMatchResult.Explanation
 	} else if r.ArgumentsMatchResult.IsMatch && !r.CallCountMatch {
-		return fmt.Sprintf("Arguments %v matched %v, but total calls of %d would exceed maxCalls of %d",
-			r.Arguments, r.Expectation, r.Expectation.totalCalls+1, r.Expectation.maxCalls)
+		return fmt.Sprintf("Arguments matched, but total calls of %d would exceed maxCalls of %d",
+			r.Expectation.totalCalls+1, r.Expectation.maxCalls)
 	}
-	return fmt.Sprintf("Args %v Didn't match any expectations. Closest was %v, but %s",
-		r.Arguments, r.Expectation, r.ArgumentsMatchResult.Explanation)
+	return "Expectation matched"
 }
 
 // ExpectationSet is a set of expectations
