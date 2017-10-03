@@ -44,9 +44,12 @@ func (a Arguments) Match(x ...string) (result ArgumentsMatchResult) {
 		} else if s, ok := expected.(string); ok && s != actual {
 			idx := findCommonPrefix([]rune(s), []rune(actual))
 			if idx == 0 {
-				result.Explanation = formatArgumentMismatch("Expected %q, got %q", s, actual)
+				result.Explanation = formatArgumentMismatch(
+					"Expected %q, got %q", shorten(s), shorten(actual))
 			} else {
-				result.Explanation = formatArgumentMismatch("Differs at character %d, expected %q, got %q", idx+1, s[idx:], actual[idx:])
+				result.Explanation = formatArgumentMismatch(
+					"Differs at character %d, expected %q, got %q", idx+1,
+					shorten(s[idx:]), shorten(actual[idx:]))
 			}
 			return
 		}
@@ -60,6 +63,17 @@ func (a Arguments) Match(x ...string) (result ArgumentsMatchResult) {
 
 	result.IsMatch = true
 	return
+}
+
+const (
+	shortenLength = 10
+)
+
+func shorten(s string) string {
+	if len(s) > shortenLength {
+		return s[:shortenLength] + "…"
+	}
+	return s
 }
 
 func findCommonPrefix(s1, s2 []rune) int {
