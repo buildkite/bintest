@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/lox/bintest/proxy"
@@ -146,24 +148,77 @@ func (e *Expectation) String() string {
 	}
 	var out = bytes.Buffer{}
 	_ = json.NewEncoder(&out).Encode(stringer)
-	return out.String()
+	return strings.TrimSpace(out.String())
 }
 
-// expectationSet is a set of expectations
+var ErrNoExpectationsMatch = errors.New("No expectations match")
+
+// ExpectationResult is the result of a set of Arguments applied to an Expectation
+type ExpectationResult struct {
+	Arguments            []string
+	Expectation          *Expectation
+	ArgumentsMatchResult ArgumentsMatchResult
+	CallCountMatch       bool
+}
+
+// ExpectationResultSet is a collection of ExpectationResult
+type ExpectationResultSet []ExpectationResult
+
+// ExactMatch returns the first Expectation that matches exactly
+func (r ExpectationResultSet) Match() (*Expectation, error) {
+	for _, row := range r {
+		if row.ArgumentsMatchResult.IsMatch && row.CallCountMatch {
+			return row.Expectation, nil
+		}
+	}
+	return nil, ErrNoExpectationsMatch
+}
+
+// BestMatch returns the ExpectationResult that was the closest match (if not the exact)
+// This is used for suggesting what the user might have meant
+func (r ExpectationResultSet) ClosestMatch() ExpectationResult {
+	var closest ExpectationResult
+	var bestCount int
+
+	for _, row := range r {
+		if row.ArgumentsMatchResult.MatchCount > bestCount {
+			bestCount = row.ArgumentsMatchResult.MatchCount
+			closest = row
+		}
+	}
+
+	return closest
+}
+
+// Explain returns an explanation of why the Expectation didn't match
+func (r ExpectationResult) Explain() string {
+	if r.ArgumentsMatchResult.IsMatch && r.CallCountMatch {
+		return fmt.Sprintf("Arguments %v matched %v", r.Arguments, r.Expectation)
+	} else if r.ArgumentsMatchResult.IsMatch && !r.CallCountMatch {
+		return fmt.Sprintf("Arguments %v matched %v, but total calls of %d would exceed maxCalls of %d",
+			r.Arguments, r.Expectation, r.Expectation.totalCalls+1, r.Expectation.maxCalls)
+	}
+	return fmt.Sprintf("Args %v Didn't match any expectations. Closest was %v, but %s",
+		r.Arguments, r.Expectation, r.ArgumentsMatchResult.Explanation)
+}
+
+// ExpectationSet is a set of expectations
 type ExpectationSet []*Expectation
 
-// Match the best matching Expectation in a set, or returns an error if one isn't found
-func (exp ExpectationSet) Match(args ...string) (*Expectation, error) {
+// ForArguments applies arguments to the expectations and returns the results
+func (exp ExpectationSet) ForArguments(args ...string) (result ExpectationResultSet) {
 	for _, e := range exp {
 		e.RLock()
 		defer e.RUnlock()
 
-		if match, _ := e.arguments.Match(args...); match {
-			if e.maxCalls == InfiniteTimes || e.totalCalls < e.maxCalls {
-				return e, nil
-			}
-		}
+		argResult := e.arguments.Match(args...)
+		result = append(result, ExpectationResult{
+			Arguments:            args,
+			Expectation:          e,
+			ArgumentsMatchResult: argResult,
+			CallCountMatch:       (e.maxCalls == InfiniteTimes || e.totalCalls < e.maxCalls),
+		})
 	}
 
-	return nil, errors.New("No expectations match")
+	return
 }

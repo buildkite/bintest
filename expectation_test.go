@@ -13,7 +13,7 @@ func TestMatchExpectations(t *testing.T) {
 		{name: "blargh", arguments: Arguments{"alpacas", "too"}, minCalls: 1, maxCalls: 5},
 	}
 
-	match, err := exp.Match("llamas", "are", "ok")
+	match, err := exp.ForArguments("llamas", "are", "ok").Match()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,13 +30,28 @@ func TestMatchOverlappingExpectations(t *testing.T) {
 		{name: "test", arguments: Arguments{"llamas", "rock"}, minCalls: 1, maxCalls: 5},
 	}
 
-	match, err := exp.Match("llamas", "rock")
+	match, err := exp.ForArguments("llamas", "rock").Match()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if !reflect.DeepEqual(exp[2], match) {
 		t.Fatalf("Got unexpected %#v", match)
+	}
+}
+
+func TestExplainExpectationMatch(t *testing.T) {
+	var exp = ExpectationSet{
+		{name: "test", arguments: Arguments{"llamas", "rock"}, totalCalls: 1, minCalls: 1, maxCalls: 1},
+		{name: "blargh", arguments: Arguments{"alpacas"}, minCalls: 1, maxCalls: 5},
+		{name: "test", arguments: Arguments{"llamas", "rock"}, minCalls: 1, maxCalls: 5},
+	}
+
+	explanation := exp.ForArguments("llamas", "ro").ClosestMatch().Explain()
+	expected := `Args [llamas ro] Didn't match any expectations. Closest was {"name":"test","args":["llamas","rock"],"calls":1,"minCalls":1,"maxCalls":1}, but Argument #2 doesn't match: Differs at character 3, expected "ck", got ""`
+
+	if explanation != expected {
+		t.Fatalf("Wrong explanation")
 	}
 }
 

@@ -15,35 +15,66 @@ func ArgumentsFromStrings(s []string) Arguments {
 	return args
 }
 
+type ArgumentsMatchResult struct {
+	IsMatch     bool
+	MatchCount  int
+	Explanation string
+}
+
 type Arguments []interface{}
 
-func (a Arguments) Match(x ...string) (bool, string) {
+func (a Arguments) Match(x ...string) (result ArgumentsMatchResult) {
 	for i, expected := range a {
-		var formatFail = func(formatter string, args ...interface{}) string {
-			return fmt.Sprintf("Argument #%d doesn't match: %s",
-				i, fmt.Sprintf(formatter, args...))
+		var formatArgumentMismatch = func(formatter string, args ...interface{}) string {
+			return fmt.Sprintf("Argument #%d doesn't match: %s", i+1, fmt.Sprintf(formatter, args...))
 		}
 
 		if len(x) <= i {
-			return false, formatFail("Expected %q, but missing an argument", expected)
+			result.Explanation = formatArgumentMismatch("Expected %q, but missing an argument", expected)
+			return
 		}
 
 		var actual = x[i]
 
 		if matcher, ok := expected.(Matcher); ok {
 			if match, message := matcher.Match(actual); !match {
-				return false, formatFail(message)
+				result.Explanation = formatArgumentMismatch(message)
+				return
 			}
 		} else if s, ok := expected.(string); ok && s != actual {
-			return false, formatFail("Expected %q, got %q", expected, actual)
+			idx := findCommonPrefix([]rune(s), []rune(actual))
+			if idx == 0 {
+				result.Explanation = formatArgumentMismatch("Expected %q, got %q", s, actual)
+			} else {
+				result.Explanation = formatArgumentMismatch("Differs at character %d, expected %q, got %q", idx+1, s[idx:], actual[idx:])
+			}
+			return
 		}
+
+		result.MatchCount++
 	}
 	if len(x) > len(a) {
-		return false, fmt.Sprintf(
-			"Argument #%d doesn't match: Unexpected extra argument", len(a))
+		result.Explanation = fmt.Sprintf("Argument #%d doesn't match: Unexpected extra argument", len(a))
+		return
 	}
 
-	return true, ""
+	result.IsMatch = true
+	return
+}
+
+func findCommonPrefix(s1, s2 []rune) int {
+	var maxLength = len(s1)
+	if len(s2) < maxLength {
+		maxLength = len(s2)
+	}
+
+	for i := 0; i < maxLength; i++ {
+		if s1[i] != s2[i] {
+			return i
+		}
+	}
+
+	return maxLength
 }
 
 func (a Arguments) String() string {
