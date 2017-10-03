@@ -2,6 +2,7 @@ package bintest
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -117,6 +118,19 @@ func MatchAny() Matcher {
 	return MatcherFunc{
 		f:   func(s string) (bool, string) { return true, "" },
 		str: "bintest.MatchAny()",
+	}
+}
+
+func MatchPattern(pattern string) Matcher {
+	re := regexp.MustCompile(pattern)
+	return MatcherFunc{
+		f: func(s string) (bool, string) {
+			if !re.MatchString(s) {
+				return false, "Didn't match pattern " + pattern
+			}
+			return true, ""
+		},
+		str: fmt.Sprintf("bintest.MatchPattern(%q)", pattern),
 	}
 }
 
