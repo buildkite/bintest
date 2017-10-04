@@ -97,8 +97,11 @@ func (m *Mock) invoke(call *proxy.Call) {
 	result := m.expected.ForArguments(call.Args...)
 	expected, err := result.Match()
 	if err != nil {
+		debugf("No match found for expectation: %v", err)
+
 		m.invocations = append(m.invocations, invocation)
 		if m.ignoreUnexpected {
+			debugf("Exiting silently, ignoreUnexpected is set")
 			call.Exit(0)
 		} else if err == ErrNoExpectationsMatch {
 			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %s\033[0m\n", result.ClosestMatch().Explain())
@@ -166,7 +169,6 @@ func (m *Mock) PassthroughToLocalCommand() *Mock {
 	if err != nil {
 		panic(err)
 	}
-	m.ignoreUnexpected = true
 	m.passthroughPath = path
 	return m
 }

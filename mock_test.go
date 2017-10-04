@@ -213,6 +213,24 @@ func TestMockWithCallFunc(t *testing.T) {
 	}
 }
 
+func TestMockRequiresExpectations(t *testing.T) {
+	bintest.Debug = true
+
+	m, err := bintest.NewMock("llamas")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = exec.Command(m.Path, "first", "call").Run()
+	if err == nil {
+		t.Fatal(err)
+	}
+
+	if m.Check(&testingT{}) == false {
+		t.Errorf("Assertions should have failed")
+	}
+}
+
 func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 	m, err := bintest.NewMock("llamas")
 	if err != nil {
