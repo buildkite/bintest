@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -56,8 +58,12 @@ func New(path string) (*Proxy, error) {
 		return nil, err
 	}
 
+	debugf("Setting server to %s", p.server.Addr)
+
 	return p, compileClient(path, []string{
-		"main.server=" + p.server.Listener.Addr().String(),
+		"main.server=" + p.server.Addr,
+		"main.certPEM=" + base64.StdEncoding.EncodeToString(p.server.certPEM),
+		"main.keyPEM=" + base64.StdEncoding.EncodeToString(p.server.keyPEM),
 	})
 }
 
@@ -77,7 +83,7 @@ func (p *Proxy) Close() error {
 	if p.tempDir != "" {
 		defer os.RemoveAll(p.tempDir)
 	}
-	return p.server.Listener.Close()
+	return p.server.Shutdown(context.Background())
 }
 
 // Call is created for every call to the proxied binary

@@ -27,6 +27,7 @@ func ExampleNew() {
 	// call the proxy like a normal binary in the background
 	cmd := exec.Command(p.Path)
 	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Env = []string{`MY_MESSAGE=Llama party! 🎉`}
 	cmd.Start()
 
@@ -280,6 +281,8 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	defer proxy.Close()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Dir = tempDir
 	cmd.Start()
 
