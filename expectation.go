@@ -125,6 +125,15 @@ func (e *Expectation) AndCallFunc(f func(*proxy.Call)) *Expectation {
 	return e
 }
 
+func AnyArguments() func(arg ...string) ArgumentsMatchResult {
+	return func(arg ...string) ArgumentsMatchResult {
+		return ArgumentsMatchResult{
+			IsMatch:    true,
+			MatchCount: len(arg),
+		}
+	}
+}
+
 func (e *Expectation) WithMatcherFunc(f func(arg ...string) ArgumentsMatchResult) *Expectation {
 	e.Lock()
 	defer e.Unlock()
