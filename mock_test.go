@@ -287,3 +287,41 @@ func TestMockMultipleExpects(t *testing.T) {
 		t.Errorf("Assertions should have passed")
 	}
 }
+
+func TestMockExpectWithNoArguments(t *testing.T) {
+	m, err := bintest.NewMock("llamas")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.Expect().AtLeastOnce()
+
+	_ = exec.Command(m.Path).Run()
+	_ = exec.Command(m.Path).Run()
+
+	if m.Check(t) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}
+
+func TestMockExpectWithMatcherFunc(t *testing.T) {
+	m, err := bintest.NewMock("llamas")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.Expect().AtLeastOnce().WithMatcherFunc(func(arg ...string) bintest.ArgumentsMatchResult {
+		return bintest.ArgumentsMatchResult{
+			IsMatch:    true,
+			MatchCount: len(arg),
+		}
+	})
+
+	_ = exec.Command(m.Path, "x", "y").Run()
+	_ = exec.Command(m.Path, "x").Run()
+	_ = exec.Command(m.Path).Run()
+
+	if m.Check(t) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}

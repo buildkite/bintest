@@ -33,6 +33,9 @@ type Expectation struct {
 	// The function to call when executed
 	callFunc func(*proxy.Call)
 
+	// A custom argument matcher function
+	matcherFunc func(arg ...string) ArgumentsMatchResult
+
 	// Amount of times this call has been called
 	totalCalls int
 
@@ -122,6 +125,13 @@ func (e *Expectation) AndCallFunc(f func(*proxy.Call)) *Expectation {
 	return e
 }
 
+func (e *Expectation) WithMatcherFunc(f func(arg ...string) ArgumentsMatchResult) *Expectation {
+	e.Lock()
+	defer e.Unlock()
+	e.matcherFunc = f
+	return e
+}
+
 func (e *Expectation) Check(t TestingT) bool {
 	if e.minCalls != InfiniteTimes && e.totalCalls < e.minCalls {
 		t.Logf("Expected [%s %s] to be called at least %d times, got %d",
@@ -183,12 +193,19 @@ func (r ExpectationResultSet) Match() (*Expectation, error) {
 func (r ExpectationResultSet) ClosestMatch() ExpectationResult {
 	var closest ExpectationResult
 	var bestCount int
+	var matched bool
 
 	for _, row := range r {
 		if row.ArgumentsMatchResult.MatchCount > bestCount {
 			bestCount = row.ArgumentsMatchResult.MatchCount
 			closest = row
+			matched = true
 		}
+	}
+
+	// if no arguments match, but there are expectations, return the first
+	if !matched && len(r) > 0 {
+		return r[0]
 	}
 
 	return closest
@@ -216,7 +233,15 @@ func (exp ExpectationSet) ForArguments(args ...string) (result ExpectationResult
 		e.RLock()
 		defer e.RUnlock()
 
-		argResult := e.arguments.Match(args...)
+		var argResult ArgumentsMatchResult
+
+		// If provided, use a custom function for matching
+		if e.matcherFunc != nil {
+			argResult = e.matcherFunc(args...)
+		} else {
+			argResult = e.arguments.Match(args...)
+		}
+
 		result = append(result, ExpectationResult{
 			Arguments:            args,
 			Expectation:          e,
