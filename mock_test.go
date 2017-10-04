@@ -164,7 +164,7 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 			}
 			defer m.Close()
 
-			m.Expect("test").MinTimes(tc.min).MaxTimes(tc.max)
+			m.Expect("test").Min(tc.min).Max(tc.max)
 			var failures int
 
 			for c := 0; c < tc.n; c++ {
@@ -214,8 +214,6 @@ func TestMockWithCallFunc(t *testing.T) {
 }
 
 func TestMockRequiresExpectations(t *testing.T) {
-	bintest.Debug = true
-
 	m, err := bintest.NewMock("llamas")
 	if err != nil {
 		t.Fatal(err)

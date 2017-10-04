@@ -43,11 +43,11 @@ type Expectation struct {
 	writeStdout, writeStderr *bytes.Buffer
 }
 
-func (e *Expectation) Times(expect int) *Expectation {
-	return e.MinTimes(expect).MaxTimes(expect)
+func (e *Expectation) Exactly(expect int) *Expectation {
+	return e.Min(expect).Max(expect)
 }
 
-func (e *Expectation) MinTimes(expect int) *Expectation {
+func (e *Expectation) Min(expect int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
 	if expect == InfiniteTimes {
@@ -57,7 +57,7 @@ func (e *Expectation) MinTimes(expect int) *Expectation {
 	return e
 }
 
-func (e *Expectation) MaxTimes(expect int) *Expectation {
+func (e *Expectation) Max(expect int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
 	e.maxCalls = expect
@@ -71,12 +71,16 @@ func (e *Expectation) Optionally() *Expectation {
 	return e
 }
 
-func (e *Expectation) Once() *Expectation {
-	return e.Times(1)
+func (e *Expectation) NotCalled() *Expectation {
+	return e.Exactly(0)
 }
 
-func (e *Expectation) NotCalled() *Expectation {
-	return e.Times(0)
+func (e *Expectation) Once() *Expectation {
+	return e.Exactly(1)
+}
+
+func (e *Expectation) AtLeastOnce() *Expectation {
+	return e.Min(1).Max(InfiniteTimes)
 }
 
 func (e *Expectation) AndExitWith(code int) *Expectation {
@@ -192,13 +196,14 @@ func (r ExpectationResultSet) ClosestMatch() ExpectationResult {
 
 // Explain returns an explanation of why the Expectation didn't match
 func (r ExpectationResult) Explain() string {
-	if r.ArgumentsMatchResult.IsMatch && !r.CallCountMatch {
+	if r.Expectation == nil {
+		return "No expectations matched call"
+	} else if r.ArgumentsMatchResult.IsMatch && !r.CallCountMatch {
 		return fmt.Sprintf("Arguments matched, but total calls of %d would exceed maxCalls of %d",
 			r.Expectation.totalCalls+1, r.Expectation.maxCalls)
 	} else if !r.ArgumentsMatchResult.IsMatch {
 		return r.ArgumentsMatchResult.Explanation
 	}
-
 	return "Expectation matched"
 }
 
