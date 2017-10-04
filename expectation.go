@@ -46,10 +46,12 @@ type Expectation struct {
 	writeStdout, writeStderr *bytes.Buffer
 }
 
+// Exactly expects exactly n invocations of this expectation
 func (e *Expectation) Exactly(expect int) *Expectation {
 	return e.Min(expect).Max(expect)
 }
 
+// Min expects a minimum of n invocations of this expectation
 func (e *Expectation) Min(expect int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -60,6 +62,7 @@ func (e *Expectation) Min(expect int) *Expectation {
 	return e
 }
 
+// Max expects a maximum of n invocations of this expectation, defaults to 1
 func (e *Expectation) Max(expect int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -67,6 +70,7 @@ func (e *Expectation) Max(expect int) *Expectation {
 	return e
 }
 
+// Optionally is a shortcut for Min(0)
 func (e *Expectation) Optionally() *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -74,18 +78,22 @@ func (e *Expectation) Optionally() *Expectation {
 	return e
 }
 
+// NotCalled is a shortcut for Exactly(0)
 func (e *Expectation) NotCalled() *Expectation {
 	return e.Exactly(0)
 }
 
+// Once is a shortcut for Exactly(1)
 func (e *Expectation) Once() *Expectation {
 	return e.Exactly(1)
 }
 
+// AtLeastOnce expects a minimum invocations of 0 and a max of InfinityTimes
 func (e *Expectation) AtLeastOnce() *Expectation {
 	return e.Min(1).Max(InfiniteTimes)
 }
 
+// AndEndsWith causes the invoker to finish with an exit code of code
 func (e *Expectation) AndExitWith(code int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -94,6 +102,7 @@ func (e *Expectation) AndExitWith(code int) *Expectation {
 	return e
 }
 
+// AndWriteToStdout causes the invoker to output s to stdout. This resets any passthrough path set
 func (e *Expectation) AndWriteToStdout(s string) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -102,6 +111,7 @@ func (e *Expectation) AndWriteToStdout(s string) *Expectation {
 	return e
 }
 
+// AndWriteToStdout causes the invoker to output s to stderr. This resets any passthrough path set
 func (e *Expectation) AndWriteToStderr(s string) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -110,6 +120,7 @@ func (e *Expectation) AndWriteToStderr(s string) *Expectation {
 	return e
 }
 
+// AndPassthroughToLocalCommand causes the invoker to defer to a local command
 func (e *Expectation) AndPassthroughToLocalCommand(path string) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -117,6 +128,7 @@ func (e *Expectation) AndPassthroughToLocalCommand(path string) *Expectation {
 	return e
 }
 
+// AndCallFunc causes a middleware function to be called before invocation
 func (e *Expectation) AndCallFunc(f func(*proxy.Call)) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -125,6 +137,7 @@ func (e *Expectation) AndCallFunc(f func(*proxy.Call)) *Expectation {
 	return e
 }
 
+// AnyArguments is a helper function for matching any argument set in WithMatcherFunc
 func AnyArguments() func(arg ...string) ArgumentsMatchResult {
 	return func(arg ...string) ArgumentsMatchResult {
 		return ArgumentsMatchResult{
@@ -134,6 +147,8 @@ func AnyArguments() func(arg ...string) ArgumentsMatchResult {
 	}
 }
 
+// WithMatcherFunc provides a custom matcher for argument sets, for instance matching variable amounts of
+// arguments
 func (e *Expectation) WithMatcherFunc(f func(arg ...string) ArgumentsMatchResult) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -141,6 +156,12 @@ func (e *Expectation) WithMatcherFunc(f func(arg ...string) ArgumentsMatchResult
 	return e
 }
 
+// WithAnyArguments causes the expectation to accept any arguments via a MatcherFunc
+func (e *Expectation) WithAnyArguments() *Expectation {
+	return e.WithMatcherFunc(AnyArguments())
+}
+
+// Check evaluates the expectation and outputs failures to the provided testing.T object
 func (e *Expectation) Check(t TestingT) bool {
 	if e.minCalls != InfiniteTimes && e.totalCalls < e.minCalls {
 		t.Logf("Expected [%s %s] to be called at least %d times, got %d",
