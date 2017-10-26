@@ -27,8 +27,14 @@ func ExampleNew() {
 	// call the proxy like a normal binary in the background
 	cmd := exec.Command(p.Path)
 	cmd.Stdout = os.Stdout
-	cmd.Env = []string{`MY_MESSAGE=Llama party! 🎉`}
-	cmd.Start()
+	cmd.Stderr = os.Stderr
+
+	// windows needs all the environment variables
+	cmd.Env = append(os.Environ(), `MY_MESSAGE=Llama party! 🎉`)
+
+	if err := cmd.Start(); err != nil {
+		log.Fatal(err)
+	}
 
 	// handle invocations of the proxy binary
 	call := <-p.Ch
@@ -65,7 +71,7 @@ func TestProxyWithStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if stdout.String() != "Copied output:\nThis is my stdin" {
+	if reflect.DeepEqual(strings.Fields(stdout.String()), []string{"Copied", "output:", "This", "is", "my", "stdin"}) {
 		t.Fatalf("Got unexpected output: %q", stdout.String())
 	}
 }
