@@ -14,8 +14,7 @@ import (
 
 func compile(dest string, src string, vars []string) error {
 	args := []string{
-		"build",
-		"-o", dest,
+		"build", "-i", "-o", dest,
 	}
 
 	if len(vars) > 0 {
