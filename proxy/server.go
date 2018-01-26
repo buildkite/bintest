@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"crypto/sha1"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,16 +14,89 @@ import (
 	"time"
 )
 
+var (
+	serverInstance *server
+	serverLock     sync.Mutex
+)
+
+func startServer() (*server, error) {
+	serverLock.Lock()
+	defer serverLock.Unlock()
+
+	if serverInstance == nil {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return nil, err
+		}
+
+		s := &server{
+			Listener: l,
+			URL:      "http://" + l.Addr().String(),
+
+			proxies:  map[string]*Proxy{},
+			handlers: map[int64]callHandler{},
+		}
+
+		debugf("[server] Starting server on %s", l.Addr().String())
+		go func() {
+			_ = http.Serve(l, s)
+		}()
+
+		serverInstance = s
+	}
+
+	return serverInstance, nil
+}
+
+func stopServer() error {
+	serverLock.Lock()
+	defer serverLock.Unlock()
+
+	if serverInstance != nil {
+		debugf("[server] Stopping server on %s", serverInstance.Addr().String())
+		_ = serverInstance.Close()
+		serverInstance = nil
+	}
+
+	return nil
+}
+
 type server struct {
 	sync.Mutex
 	net.Listener
+	URL string
 
-	proxy    *Proxy
+	proxies  map[string]*Proxy
 	handlers map[int64]callHandler
+}
+
+func (s *server) registerProxy(p *Proxy) (string, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	id := fmt.Sprintf("%x", sha1.Sum([]byte(p.Path)))
+
+	debugf("[server] Registering proxy %s as %s", p.Path, id)
+	s.proxies[id] = p
+
+	return id, nil
+}
+
+func (s *server) deregisterProxy(p *Proxy) error {
+	s.Lock()
+	defer s.Unlock()
+
+	id := fmt.Sprintf("%x", sha1.Sum([]byte(p.Path)))
+
+	debugf("[server] Deregistering proxy %s", id)
+	delete(s.proxies, id)
+
+	return nil
 }
 
 func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		ID    string
 		Args  []string
 		Env   []string
 		Dir   string
@@ -34,9 +109,17 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	debugf("[server] Initial request from proxy on %s", r.RemoteAddr)
-
+	debugf("[server] Initial request for %s (%s)", req.ID, r.RemoteAddr)
 	s.Lock()
+
+	// find the proxy instance in the server
+	proxy, ok := s.proxies[req.ID]
+	if !ok {
+		debugf("[server] ERROR: No proxy found for %s", req.ID)
+		s.Unlock()
+		http.Error(w, "No proxy found for "+req.ID, http.StatusNotFound)
+		return
+	}
 
 	// these pipes connect the call to the various http request/responses
 	outR, outW := io.Pipe()
@@ -44,7 +127,7 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	inR, inW := io.Pipe()
 
 	// create a custom handler with the id for subsequent requests to hit
-	call := s.proxy.newCall(req.Args, req.Env, req.Dir)
+	call := proxy.newCall(req.Args, req.Env, req.Dir)
 	call.Stdout = outW
 	call.Stderr = errW
 	call.Stdin = inR
@@ -65,7 +148,7 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	s.Unlock()
 
 	// dispatch to whatever handles the call
-	s.proxy.Ch <- call
+	proxy.Ch <- call
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(&struct {
@@ -98,24 +181,6 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ch.ServeHTTP(w, r)
 	debugf("[server] END %s (%v)", r.URL.Path, time.Now().Sub(start))
-}
-
-func startServer(p *Proxy) (*server, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, err
-	}
-
-	debugf("[server] Started server on %s", l.Addr().String())
-	s := &server{
-		Listener: l,
-		proxy:    p,
-		handlers: map[int64]callHandler{},
-	}
-
-	debugf("Starting server on %s", l.Addr().String())
-	go http.Serve(l, s)
-	return s, nil
 }
 
 type callHandler struct {

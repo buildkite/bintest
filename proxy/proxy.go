@@ -29,9 +29,6 @@ type Proxy struct {
 
 	// A temporary directory created for the binary
 	tempDir string
-
-	// The http server the proxy runs
-	server *server
 }
 
 // New returns a new instance of a Proxy with a compiled binary and a started server
@@ -51,20 +48,25 @@ func Compile(path string) (*Proxy, error) {
 		path += ".exe"
 	}
 
+	server, err := startServer()
+	if err != nil {
+		return nil, err
+	}
+
 	p := &Proxy{
 		Path:    path,
 		Ch:      make(chan *Call),
 		tempDir: tempDir,
 	}
 
-	var err error
-	p.server, err = startServer(p)
+	id, err := server.registerProxy(p)
 	if err != nil {
 		return nil, err
 	}
 
 	return p, compileClient(path, []string{
-		"main.server=" + "http://" + p.server.Listener.Addr().String(),
+		"main.server=" + server.URL,
+		"main.id=" + id,
 	})
 }
 
@@ -79,12 +81,23 @@ func (p *Proxy) newCall(args []string, env []string, dir string) *Call {
 	}
 }
 
-// Close the proxy and remove the compiled file
-func (p *Proxy) Close() error {
-	if p.tempDir != "" {
-		defer os.RemoveAll(p.tempDir)
-	}
-	return p.server.Listener.Close()
+// Close the proxy and remove the temp directory
+func (p *Proxy) Close() (err error) {
+	defer func() {
+		if p.tempDir != "" {
+			if removeErr := os.RemoveAll(p.tempDir); removeErr != nil {
+				err = removeErr
+			}
+		}
+	}()
+	defer func() {
+		serverLock.Lock()
+		defer serverLock.Unlock()
+		if deregisterErr := serverInstance.deregisterProxy(p); deregisterErr != nil {
+			err = deregisterErr
+		}
+	}()
+	return err
 }
 
 // Call is created for every call to the proxied binary
