@@ -165,10 +165,10 @@ func (c *Call) Passthrough(path string) {
 		} else {
 			panic(err)
 		}
+	} else {
+		debugf("[server] Invoked command exited with 0")
+		c.Exit(0)
 	}
-
-	debugf("[server] Invoked command exited with 0")
-	c.Exit(0)
 }
 
 var (

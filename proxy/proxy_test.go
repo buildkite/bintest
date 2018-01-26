@@ -380,6 +380,28 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 	}
 }
 
+func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
+	proxy, err := proxy.Compile("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	cmd := exec.Command(proxy.Path)
+	cmd.Env = []string{}
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	call := <-proxy.Ch
+	call.Passthrough(`/usr/bin/false`)
+
+	if err = cmd.Wait(); err == nil {
+		t.Fatalf("Expected an error")
+	}
+}
+
 func BenchmarkCreatingProxies(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		proxy, err := proxy.Compile("test")

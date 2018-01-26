@@ -2,6 +2,7 @@ package bintest_test
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"reflect"
 	"testing"
@@ -79,6 +80,7 @@ func TestCallingMockWithNoExpectationsSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	_, err = exec.Command(m.Path, "blargh").CombinedOutput()
 	if err == nil {
@@ -97,6 +99,7 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.Expect("blargh").
 		AndWriteToStdout("llamas rock").
@@ -217,6 +220,7 @@ func TestMockRequiresExpectations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	err = exec.Command(m.Path, "first", "call").Run()
 	if err == nil {
@@ -233,6 +237,7 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.IgnoreUnexpectedInvocations()
 	m.Expect("first", "call").Once()
@@ -256,6 +261,7 @@ func TestMockOptionally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.Expect("first", "call").Optionally()
 	m.Expect("third", "call").Once()
@@ -273,6 +279,7 @@ func TestMockMultipleExpects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.Expect("first", "call")
 	m.Expect("first", "call")
@@ -292,6 +299,7 @@ func TestMockExpectWithNoArguments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.Expect().AtLeastOnce()
 
@@ -308,6 +316,7 @@ func TestMockExpectWithMatcherFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.Expect().AtLeastOnce().WithMatcherFunc(func(arg ...string) bintest.ArgumentsMatchResult {
 		return bintest.ArgumentsMatchResult{
@@ -319,6 +328,39 @@ func TestMockExpectWithMatcherFunc(t *testing.T) {
 	_ = exec.Command(m.Path, "x", "y").Run()
 	_ = exec.Command(m.Path, "x").Run()
 	_ = exec.Command(m.Path).Run()
+
+	if m.Check(t) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}
+
+func TestMockExpectWithBefore(t *testing.T) {
+	bintest.Debug = true
+	proxy.Debug = true
+
+	m, err := bintest.NewMock("true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	m.PassthroughToLocalCommand().Before(func(i bintest.Invocation) error {
+		if err := bintest.ExpectEnv(t, i.Env, `MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	m.Expect().AtLeastOnce().WithAnyArguments()
+
+	cmd := exec.Command(m.Path)
+	cmd.Env = []string{`MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`}
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+
+	if err = cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
 
 	if m.Check(t) == false {
 		t.Errorf("Assertions should have passed")
