@@ -59,7 +59,7 @@ func compile(dest string, src string, vars []string) error {
 		return fmt.Errorf("Compile of %s failed: %s", src, output)
 	}
 
-	debugf("[compiler] Compiled %s in %v", dest, time.Now().Sub(start))
+	debugf("[compiler] Compiled %s in %v", dest, time.Now().Sub(t))
 	return nil
 }
 

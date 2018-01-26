@@ -54,15 +54,15 @@ func TestProxyWithStdin(t *testing.T) {
 	}
 	defer proxy.Close()
 
-	stdout := &bytes.Buffer{}
+	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path)
-	cmd.Stdin = strings.NewReader("This is my stdin")
-	cmd.Stdout = stdout
+	cmd.Stdin = strings.NewReader("This is my stdin\n")
+	cmd.Stdout = outBuf
 	cmd.Start()
 
 	call := <-proxy.Ch
-	fmt.Fprintln(call.Stdout, "Copied output:")
+	fmt.Fprintln(call.Stdout, "Copied to stdout")
 	io.Copy(call.Stdout, call.Stdin)
 	call.Exit(0)
 
@@ -71,8 +71,8 @@ func TestProxyWithStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if reflect.DeepEqual(strings.Fields(stdout.String()), []string{"Copied", "output:", "This", "is", "my", "stdin"}) {
-		t.Fatalf("Got unexpected output: %q", stdout.String())
+	if expected := "Copied to stdout\nThis is my stdin\n"; outBuf.String() != expected {
+		t.Fatalf("Expected stdout to be %q, got %q", expected, outBuf.String())
 	}
 }
 
@@ -314,6 +314,66 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	// wait for the command to finish
 	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
+	proxy, err := proxy.Compile("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	outBuf := &bytes.Buffer{}
+
+	cmd := exec.Command(proxy.Path, `hello world`)
+	cmd.Env = []string{}
+	cmd.Stdout = outBuf
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	call := <-proxy.Ch
+	call.Passthrough(`/bin/echo`)
+
+	if err = cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	if expected := "hello world\n"; outBuf.String() != expected {
+		t.Fatalf("Expected stdout to be %q, got %q", expected, outBuf.String())
+	}
+}
+
+func TestProxyWithPassthroughWithStdin(t *testing.T) {
+	proxy, err := proxy.Compile("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	inBuf := bytes.NewBufferString("hello world\n")
+	outBuf := &bytes.Buffer{}
+
+	cmd := exec.Command(proxy.Path)
+	cmd.Env = []string{}
+	cmd.Stdin = inBuf
+	cmd.Stdout = outBuf
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	call := <-proxy.Ch
+	call.Passthrough(`/bin/cat`)
+
+	if err = cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	if expected := "hello world\n"; outBuf.String() != expected {
+		t.Fatalf("Expected stdout to be %q, got %q", expected, outBuf.String())
 	}
 }
 

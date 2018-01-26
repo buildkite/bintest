@@ -59,13 +59,20 @@ func (c *Client) Run() int {
 		c.debugf("Finished process")
 	}()
 
+	// Data sent to the server about the local invocation
 	var req = struct {
-		Args []string
-		Env  []string
-		Dir  string
+		Args  []string
+		Env   []string
+		Dir   string
+		Stdin bool
 	}{
-		c.Args, c.Env, c.WorkingDir,
+		c.Args,
+		c.Env,
+		c.WorkingDir,
+		c.isStdinReadable(),
 	}
+
+	// Reply from the server
 	var resp struct {
 		ID int64
 	}
@@ -82,6 +89,7 @@ func (c *Client) Run() int {
 	wg.Add(2)
 
 	if c.isStdinReadable() {
+		c.debugf("Stdin is readable")
 		go func() {
 			r, w := io.Pipe()
 			wg.Add(1)
@@ -111,7 +119,8 @@ func (c *Client) Run() int {
 			}
 
 			if resp.StatusCode != http.StatusOK {
-				panic(fmt.Sprintf("Server returned %s (%d)", resp.Status, resp.StatusCode))
+				panic(fmt.Sprintf("Server returned non-ok http status code: %s (%d)",
+					resp.Status, resp.StatusCode))
 			}
 		}()
 	} else if c.Stdin != nil {
@@ -154,6 +163,10 @@ func (c *Client) Run() int {
 }
 
 func (c *Client) isStdinReadable() bool {
+	if c.Stdin == nil {
+		return false
+	}
+
 	// check that we have a named pipe with stuff to read
 	// See https://stackoverflow.com/a/26567513
 	if stdinFile, ok := c.Stdin.(*os.File); ok {
@@ -167,6 +180,9 @@ func (c *Client) isStdinReadable() bool {
 			c.debugf("Stdin has %d bytes to read", stat.Size())
 			return true
 		}
+	} else {
+		c.debugf("Stdin is a plain io.Reader")
+		return true
 	}
 
 	return false
@@ -186,10 +202,10 @@ func (c *Client) get(path string) (*http.Response, error) {
 		return nil, err
 	}
 
-	c.debugf("Server returned %d", resp.StatusCode)
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Server returned %s (%d)", resp.Status, resp.StatusCode)
+		c.debugf("Server returned status code %d", resp.StatusCode)
+
+		return nil, fmt.Errorf("Server returned non-ok status code %s (%d)", resp.Status, resp.StatusCode)
 	}
 
 	return resp, err

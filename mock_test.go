@@ -45,7 +45,6 @@ func TestCallingMockWithStdErrExpected(t *testing.T) {
 
 	if string(out) != "llamas" {
 		t.Fatalf("Expected llamas, got %q", out)
-
 	}
 }
 

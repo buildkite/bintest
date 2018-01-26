@@ -20,18 +20,13 @@ type server struct {
 	handlers map[int64]callHandler
 }
 
-type serverRequest struct {
-	Args []string
-	Env  []string
-	Dir  string
-}
-
-type serverResponse struct {
-	ID int64
-}
-
 func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
-	var req serverRequest
+	var req struct {
+		Args  []string
+		Env   []string
+		Dir   string
+		Stdin bool
+	}
 
 	// parse the posted args end env
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -54,6 +49,12 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	call.Stderr = errW
 	call.Stdin = inR
 
+	// close off stdin if it's not going to be provided
+	if !req.Stdin {
+		debugf("[server] Ignoring stdin, none provided")
+		_ = inW.Close()
+	}
+
 	s.handlers[call.ID] = callHandler{
 		call:   call,
 		stdout: outR,
@@ -67,7 +68,9 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	s.proxy.Ch <- call
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(&serverResponse{
+	_ = json.NewEncoder(w).Encode(&struct {
+		ID int64
+	}{
 		ID: call.ID,
 	})
 }
