@@ -6,11 +6,13 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 )
 
 // Proxy provides a way to programatically respond to invocations of a compiled
@@ -33,7 +35,7 @@ type Proxy struct {
 }
 
 // New returns a new instance of a Proxy with a compiled binary and a started server
-func New(path string) (*Proxy, error) {
+func Compile(path string) (*Proxy, error) {
 	var tempDir string
 
 	if !filepath.IsAbs(path) {
@@ -62,7 +64,7 @@ func New(path string) (*Proxy, error) {
 	}
 
 	return p, compileClient(path, []string{
-		"main.server=" + p.server.Listener.Addr().String(),
+		"main.server=" + "http://" + p.server.Listener.Addr().String(),
 	})
 }
 
@@ -128,6 +130,32 @@ func (c *Call) Exit(code int) {
 
 	// wait for the client to get it
 	<-c.doneCh
+}
+
+// Passthrough invokes another local binary and returns the results
+func (c *Call) Passthrough(path string) {
+	debugf("[server] Passing call through to %s %v", path, c.Args)
+
+	cmd := exec.Command(path, c.Args...)
+	cmd.Env = c.Env
+	cmd.Stdout = c.Stdout
+	cmd.Stderr = c.Stderr
+	cmd.Stdin = c.Stdin
+	cmd.Dir = c.Dir
+
+	var waitStatus syscall.WaitStatus
+	if err := cmd.Run(); err != nil {
+		debugf("[server] Invoked command exited with error: %v", err)
+		if exitError, ok := err.(*exec.ExitError); ok {
+			waitStatus = exitError.Sys().(syscall.WaitStatus)
+			c.Exit(waitStatus.ExitStatus())
+		} else {
+			panic(err)
+		}
+	}
+
+	debugf("[server] Invoked command exited with 0")
+	c.Exit(0)
 }
 
 var (

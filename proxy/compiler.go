@@ -10,7 +10,28 @@ import (
 	"time"
 )
 
-//go:generate go-bindata -pkg proxy data/
+const clientSrc = `package main
+
+import (
+	"github.com/lox/bintest/proxy/client"
+	"os"
+)
+
+var (
+	debug string
+	server string
+)
+
+func main() {
+	c := client.New(server)
+
+	if debug == "true" {
+		c.Debug = true
+	}
+
+	os.Exit(c.Run())
+}
+`
 
 func compile(dest string, src string, vars []string) error {
 	args := []string{
@@ -38,16 +59,11 @@ func compile(dest string, src string, vars []string) error {
 		return fmt.Errorf("Compile of %s failed: %s", src, output)
 	}
 
-	debugf("Compile %#v finished in %s", args, time.Now().Sub(t))
+	debugf("[compiler] Compiled %s in %v", dest, time.Now().Sub(t))
 	return nil
 }
 
 func compileClient(dest string, vars []string) error {
-	data, err := Asset("data/client.go")
-	if err != nil {
-		return err
-	}
-
 	dir, err := ioutil.TempDir("", "binproxy")
 	if err != nil {
 		return fmt.Errorf("Error creating temp dir: %v", err)
@@ -55,7 +71,7 @@ func compileClient(dest string, vars []string) error {
 
 	defer os.RemoveAll(dir)
 
-	err = ioutil.WriteFile(filepath.Join(dir, "client.go"), data, 0500)
+	err = ioutil.WriteFile(filepath.Join(dir, "client.go"), []byte(clientSrc), 0500)
 	if err != nil {
 		return err
 	}
