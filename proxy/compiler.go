@@ -18,12 +18,13 @@ import (
 )
 
 var (
-	debug string
+	debug  string
 	server string
+	id     string
 )
 
 func main() {
-	c := client.New(server)
+	c := client.New(id, server)
 
 	if debug == "true" {
 		c.Debug = true
@@ -54,6 +55,7 @@ func compile(dest string, src string, vars []string) error {
 
 	t := time.Now()
 
+	debugf("[compiler] go %s %s", strings.Join(args, " "), src)
 	output, err := exec.Command("go", append(args, src)...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Compile of %s failed: %s", src, output)

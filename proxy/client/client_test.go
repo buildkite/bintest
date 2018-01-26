@@ -34,6 +34,7 @@ func TestClient(t *testing.T) {
 
 	c := client.Client{
 		URL:    ts.URL,
+		ID:     "myproxy",
 		Args:   []string{"llamas"},
 		Stdout: stdout,
 		Stderr: stderr,

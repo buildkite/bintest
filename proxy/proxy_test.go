@@ -57,8 +57,10 @@ func TestProxyWithStdin(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path)
+	cmd.Env = []string{}
 	cmd.Stdin = strings.NewReader("This is my stdin\n")
 	cmd.Stdout = outBuf
+	cmd.Stderr = os.Stderr
 	cmd.Start()
 
 	call := <-proxy.Ch

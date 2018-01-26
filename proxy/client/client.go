@@ -25,6 +25,7 @@ type Response struct {
 type Client struct {
 	Debug bool
 	URL   string
+	ID    string
 
 	Args       []string
 	WorkingDir string
@@ -35,7 +36,7 @@ type Client struct {
 	Stderr io.WriteCloser
 }
 
-func New(URL string) *Client {
+func New(ID string, URL string) *Client {
 	wd, err := os.Getwd()
 	if err != nil {
 		panic(err)
@@ -43,6 +44,7 @@ func New(URL string) *Client {
 
 	return &Client{
 		URL:        URL,
+		ID:         ID,
 		Args:       os.Args[1:],
 		Env:        os.Environ(),
 		WorkingDir: wd,
@@ -54,18 +56,20 @@ func New(URL string) *Client {
 
 // Run the client, panics on error and returns an exit code on success
 func (c *Client) Run() int {
-	c.debugf("Connecting to %s", c.URL)
+	c.debugf("Connecting to %s (ID %s)", c.URL, c.ID)
 	defer func() {
 		c.debugf("Finished process")
 	}()
 
 	// Data sent to the server about the local invocation
 	var req = struct {
+		ID    string
 		Args  []string
 		Env   []string
 		Dir   string
 		Stdin bool
 	}{
+		c.ID,
 		c.Args,
 		c.Env,
 		c.WorkingDir,
@@ -80,6 +84,7 @@ func (c *Client) Run() int {
 	// We fire off an initial request to start the flow, and expect an integer
 	// back that we will use in subsequent requests
 	if err := c.postJSON("/", req, &resp); err != nil {
+		c.debugf("Err from server: %v", err)
 		panic(err)
 	}
 
@@ -119,7 +124,7 @@ func (c *Client) Run() int {
 			}
 
 			if resp.StatusCode != http.StatusOK {
-				panic(fmt.Sprintf("Server returned non-ok http status code: %s (%d)",
+				panic(fmt.Sprintf("Server response was not OK: %s (%d)",
 					resp.Status, resp.StatusCode))
 			}
 		}()
@@ -203,9 +208,8 @@ func (c *Client) get(path string) (*http.Response, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		c.debugf("Server returned status code %d", resp.StatusCode)
-
-		return nil, fmt.Errorf("Server returned non-ok status code %s (%d)", resp.Status, resp.StatusCode)
+		return nil, fmt.Errorf("Server response was not OK: %s (%d)",
+			resp.Status, resp.StatusCode)
 	}
 
 	return resp, err
@@ -241,8 +245,15 @@ func (c *Client) postJSON(path string, from interface{}, into interface{}) (err 
 		return err
 	}
 	defer func() {
-		err = resp.Body.Close()
+		if respErr := resp.Body.Close(); respErr != nil {
+			err = respErr
+		}
 	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Server response was not OK: %s (%d)",
+			resp.Status, resp.StatusCode)
+	}
 
 	// Receive the body as JSON
 	if err = json.NewDecoder(resp.Body).Decode(&into); err != nil {
