@@ -36,12 +36,8 @@ func main() {
 
 func compile(dest string, src string, vars []string) error {
 	args := []string{
-<<<<<<< HEAD
 		"build",
 		"-o", dest,
-=======
-		"build", "-o", dest,
->>>>>>> Clean up debugging output
 	}
 
 	if len(vars) > 0 {
