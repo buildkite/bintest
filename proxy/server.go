@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type server struct {
@@ -38,6 +39,8 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	debugf("[server] Initial request from proxy on %s", r.RemoteAddr)
+
 	s.Lock()
 
 	// these pipes connect the call to the various http request/responses
@@ -64,13 +67,14 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	s.proxy.Ch <- call
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(&serverResponse{
+	_ = json.NewEncoder(w).Encode(&serverResponse{
 		ID: call.ID,
 	})
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	debugf("[http] START %s", r.URL.Path)
+	start := time.Now()
+	debugf("[server] %s %s", r.Method, r.URL.Path)
 
 	if r.URL.Path == "/" {
 		s.serveInitialCall(w, r)
@@ -90,7 +94,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch.ServeHTTP(w, r)
-	debugf("[http] END %s", r.URL.Path)
+	debugf("[server] END %s (%v)", r.URL.Path, time.Now().Sub(start))
 }
 
 func startServer(p *Proxy) (*server, error) {
@@ -99,6 +103,7 @@ func startServer(p *Proxy) (*server, error) {
 		return nil, err
 	}
 
+	debugf("[server] Started server on %s", l.Addr().String())
 	s := &server{
 		Listener: l,
 		proxy:    p,
@@ -121,29 +126,29 @@ type callHandler struct {
 func (ch *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch path.Base(r.URL.Path) {
 	case "stdout":
-		debugf("[call] Starting copy of stdout")
+		debugf("[server] Starting copy of stdout")
 		copyPipeWithFlush(w, ch.stdout)
-		debugf("[call] Finished copy of stdout")
+		debugf("[server] Finished copy of stdout")
 
 	case "stderr":
-		debugf("[call] Starting copy of stderr")
+		debugf("[server] Starting copy of stderr")
 		copyPipeWithFlush(w, ch.stderr)
-		debugf("[call] Finished copy of stderr")
+		debugf("[server] Finished copy of stderr")
 
 	case "stdin":
-		debugf("[call] Starting copy of stdin")
+		debugf("[server] Starting copy of stdin")
 		_, _ = io.Copy(ch.stdin, r.Body)
-		r.Body.Close()
-		ch.stdin.Close()
-		debugf("[call] Finished copy of stdin")
+		_ = r.Body.Close()
+		_ = ch.stdin.Close()
+		debugf("[server] Finished copy of stdin")
 
 	case "exitcode":
-		debugf("[call] Waiting for exitcode")
+		debugf("[server] Waiting for exitcode to send")
 		exitCode := <-ch.call.exitCodeCh
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")
-		json.NewEncoder(w).Encode(&exitCode)
+		_ = json.NewEncoder(w).Encode(&exitCode)
 		w.(http.Flusher).Flush()
-		debugf("[call] Sending exit code")
+		debugf("[server] Sending exit code %d to proxy", exitCode)
 		ch.call.doneCh <- struct{}{}
 
 	default:

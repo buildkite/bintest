@@ -33,7 +33,7 @@ type Proxy struct {
 }
 
 // New returns a new instance of a Proxy with a compiled binary and a started server
-func New(path string) (*Proxy, error) {
+func Compile(path string) (*Proxy, error) {
 	var tempDir string
 
 	if !filepath.IsAbs(path) {
@@ -62,7 +62,7 @@ func New(path string) (*Proxy, error) {
 	}
 
 	return p, compileClient(path, []string{
-		"main.server=" + p.server.Listener.Addr().String(),
+		"main.server=" + "http://" + p.server.Listener.Addr().String(),
 	})
 }
 

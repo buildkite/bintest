@@ -16,9 +16,9 @@ import (
 	"github.com/lox/bintest/proxy"
 )
 
-func ExampleNew() {
+func ExampleCompile() {
 	// create a proxy for the git command that echos some debug
-	p, err := proxy.New("git")
+	p, err := proxy.Compile("git")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func ExampleNew() {
 }
 
 func TestProxyWithStdin(t *testing.T) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,47 +77,60 @@ func TestProxyWithStdin(t *testing.T) {
 }
 
 func TestProxyWithStdout(t *testing.T) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
 
+	outBuf := &bytes.Buffer{}
+
 	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Stdout = outBuf
+	cmd.Stderr = os.Stderr
 	cmd.Start()
 
 	call := <-proxy.Ch
 	fmt.Fprintln(call.Stdout, "Yup!")
 	call.Exit(0)
 
-	// wait for the command to finish
 	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
+	}
+
+	if expected := "Yup!\n"; outBuf.String() != expected {
+		t.Fatalf("Expected stdout to be %q, got %q", expected, outBuf.String())
 	}
 }
 
 func TestProxyWithStderr(t *testing.T) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
 
+	errBuf := &bytes.Buffer{}
+
 	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Stderr = errBuf
 	cmd.Start()
 
 	call := <-proxy.Ch
 	fmt.Fprintln(call.Stderr, "Yup!")
 	call.Exit(0)
 
-	// wait for the command to finish
 	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
+	}
+
+	if expected := "Yup!\n"; errBuf.String() != expected {
+		t.Fatalf("Expected stderr to be %q, got %q", expected, errBuf.String())
 	}
 }
 
 func TestProxyWithStdoutAndStderr(t *testing.T) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +171,7 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 }
 
 func TestProxyWithNoOutput(t *testing.T) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +196,7 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 
 	actual := &bytes.Buffer{}
 
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,13 +226,15 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 }
 
 func TestProxyWithNonZeroExitCode(t *testing.T) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Start()
 
 	call := <-proxy.Ch
@@ -240,7 +255,7 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 }
 
 func TestProxyCloseRemovesFile(t *testing.T) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +294,7 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +319,7 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 
 func BenchmarkCreatingProxies(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		proxy, err := proxy.New("test")
+		proxy, err := proxy.Compile("test")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -313,7 +328,7 @@ func BenchmarkCreatingProxies(b *testing.B) {
 }
 
 func BenchmarkCallingProxies(b *testing.B) {
-	proxy, err := proxy.New("test")
+	proxy, err := proxy.Compile("test")
 	if err != nil {
 		b.Fatal(err)
 	}
