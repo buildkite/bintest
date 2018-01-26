@@ -142,6 +142,7 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 	stderr := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Env = []string{}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 

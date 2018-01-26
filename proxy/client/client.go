@@ -185,12 +185,22 @@ func (c *Client) isStdinReadable() bool {
 
 func (c *Client) debugf(pattern string, args ...interface{}) {
 	if c.Debug {
-		log.Printf(fmt.Sprintf("[client %s #%d] ", filepath.Base(os.Args[0]), os.Getpid())+pattern, args...)
+		format := fmt.Sprintf("[client %s] %s", filepath.Base(os.Args[0]), pattern)
+		b := bytes.NewBufferString(fmt.Sprintf(format, args...))
+		u := fmt.Sprintf("%s/debug", c.URL)
+
+		resp, err := http.Post(u, "text/plain; charset=utf-8", b)
+		if err != nil {
+			log.Printf("Error posting to debug: %#v", err)
+		}
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 	}
 }
 
 func (c *Client) get(path string) (*http.Response, error) {
-	c.debugf("GET %s", path)
+	c.debugf("GET /%s", path)
 
 	resp, err := http.Get(c.URL + "/" + path)
 	if err != nil {

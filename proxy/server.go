@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"path"
@@ -121,7 +122,7 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	debugf("[server] Initial request for %s (%s)", req.ID, filepath.Base(proxy.Path))
+	debugf("[server] New proxy call for %s (%s)", filepath.Base(proxy.Path), req.ID)
 
 	// these pipes connect the call to the various http request/responses
 	outR, outW := io.Pipe()
@@ -133,6 +134,8 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 	call.Stdout = outW
 	call.Stderr = errW
 	call.Stdin = inR
+
+	debugf("[server] Returning call id %d", call.ID)
 
 	// close off stdin if it's not going to be provided
 	if !req.Stdin {
@@ -161,6 +164,13 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/debug" {
+		body, _ := ioutil.ReadAll(r.Body)
+		_ = r.Body.Close()
+		debugf("%s", body)
+		return
+	}
+
 	start := time.Now()
 	debugf("[server] %s %s", r.Method, r.URL.Path)
 
