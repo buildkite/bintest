@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -109,7 +110,6 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	debugf("[server] Initial request for %s (%s)", req.ID, r.RemoteAddr)
 	s.Lock()
 
 	// find the proxy instance in the server
@@ -120,6 +120,8 @@ func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No proxy found for "+req.ID, http.StatusNotFound)
 		return
 	}
+
+	debugf("[server] Initial request for %s (%s)", req.ID, filepath.Base(proxy.Path))
 
 	// these pipes connect the call to the various http request/responses
 	outR, outW := io.Pipe()

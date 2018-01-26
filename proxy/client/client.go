@@ -12,16 +12,6 @@ import (
 	"sync"
 )
 
-type Request struct {
-	Args []string
-	Env  []string
-	Dir  string
-}
-
-type Response struct {
-	ID int64
-}
-
 type Client struct {
 	Debug bool
 	URL   string
@@ -56,7 +46,7 @@ func New(ID string, URL string) *Client {
 
 // Run the client, panics on error and returns an exit code on success
 func (c *Client) Run() int {
-	c.debugf("Connecting to %s (ID %s)", c.URL, c.ID)
+	c.debugf("Connecting to %s", c.URL)
 	defer func() {
 		c.debugf("Finished process")
 	}()
