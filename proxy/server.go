@@ -70,13 +70,13 @@ type server struct {
 }
 
 func (s *server) registerProxy(p *Proxy) {
-	debugf("[server] Registering proxy %s", p.Name)
-	s.proxies.Store(p.Name, p)
+	debugf("[server] Registering proxy %s", p.Path)
+	s.proxies.Store(p.Path, p)
 }
 
 func (s *server) deregisterProxy(p *Proxy) {
-	debugf("[server] Deregistering proxy %s", p.Name)
-	s.proxies.Delete(p.Name)
+	debugf("[server] Deregistering proxy %s", p.Path)
+	s.proxies.Delete(p.Path)
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -112,14 +112,16 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	debugf("[server] END %s (%v)", r.URL.Path, time.Now().Sub(start))
 }
 
+type NewCallRequest struct {
+	Path  string
+	Args  []string
+	Env   []string
+	Dir   string
+	Stdin bool
+}
+
 func (s *server) handleNewCall(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name  string
-		Args  []string
-		Env   []string
-		Dir   string
-		Stdin bool
-	}
+	var req NewCallRequest
 
 	// parse the posted args end env
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -128,14 +130,14 @@ func (s *server) handleNewCall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// find the proxy instance in the server
-	proxy, ok := s.proxies.Load(req.Name)
+	proxy, ok := s.proxies.Load(req.Path)
 	if !ok {
-		debugf("[server] ERROR: No proxy found for %s", req.Name)
-		http.Error(w, "No proxy found for "+req.Name, http.StatusNotFound)
+		debugf("[server] ERROR: No proxy found for %s", req.Path)
+		http.Error(w, "No proxy found for "+req.Path, http.StatusNotFound)
 		return
 	}
 
-	debugf("[server] New call for %s", req.Name)
+	debugf("[server] New call for %s", req.Path)
 
 	// these pipes connect the call to the various http request/responses
 	outR, outW := io.Pipe()

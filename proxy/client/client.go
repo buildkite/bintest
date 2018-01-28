@@ -10,13 +10,15 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/lox/bintest/proxy"
 )
 
 type Client struct {
 	Debug bool
 	URL   string
 
-	Name       string
+	Path       string
 	Args       []string
 	WorkingDir string
 	Env        []string
@@ -34,7 +36,7 @@ func New(URL string) *Client {
 
 	return &Client{
 		URL:        URL,
-		Name:       filepath.Base(os.Args[0]),
+		Path:       os.Args[0],
 		Args:       os.Args[1:],
 		Env:        os.Environ(),
 		WorkingDir: wd,
@@ -52,14 +54,8 @@ func (c *Client) Run() int {
 	}()
 
 	// Data sent to the server about the local invocation
-	var req = struct {
-		Name  string
-		Args  []string
-		Env   []string
-		Dir   string
-		Stdin bool
-	}{
-		c.Name,
+	var req = proxy.NewCallRequest{
+		c.Path,
 		c.Args,
 		c.Env,
 		c.WorkingDir,
@@ -186,7 +182,7 @@ func (c *Client) isStdinReadable() bool {
 
 func (c *Client) debugf(pattern string, args ...interface{}) {
 	if c.Debug {
-		format := fmt.Sprintf("[client %s] %s", c.Name, pattern)
+		format := fmt.Sprintf("[client %s] %s", filepath.Base(c.Path), pattern)
 		b := bytes.NewBufferString(fmt.Sprintf(format, args...))
 		u := c.URL + "/debug"
 

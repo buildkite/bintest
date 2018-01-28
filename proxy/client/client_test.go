@@ -39,7 +39,7 @@ func TestClient(t *testing.T) {
 	c := client.Client{
 		Debug:  false,
 		URL:    ts.URL,
-		Name:   "llamasbin",
+		Path:   "/tmp/llamasbin",
 		Args:   []string{"llamas"},
 		Stdout: stdout,
 		Stderr: stderr,

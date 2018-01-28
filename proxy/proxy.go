@@ -21,9 +21,6 @@ type Proxy struct {
 	// Ch is the channel of calls
 	Ch chan *Call
 
-	// Name is the name of the binary
-	Name string
-
 	// Path is the full path to the compiled binproxy file
 	Path string
 
@@ -34,7 +31,8 @@ type Proxy struct {
 	tempDir string
 }
 
-// New returns a new instance of a Proxy with a compiled binary and a started server
+// Compile generates a mock binary at the provided path. If just a filename is provided a temp
+// directory is created.
 func Compile(path string) (*Proxy, error) {
 	var tempDir string
 
@@ -58,7 +56,6 @@ func Compile(path string) (*Proxy, error) {
 
 	p := &Proxy{
 		Path:    path,
-		Name:    filepath.Base(path),
 		Ch:      make(chan *Call),
 		tempDir: tempDir,
 	}
