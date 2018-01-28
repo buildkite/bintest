@@ -21,6 +21,9 @@ type Proxy struct {
 	// Ch is the channel of calls
 	Ch chan *Call
 
+	// Name is the name of the binary
+	Name string
+
 	// Path is the full path to the compiled binproxy file
 	Path string
 
@@ -55,18 +58,15 @@ func Compile(path string) (*Proxy, error) {
 
 	p := &Proxy{
 		Path:    path,
+		Name:    filepath.Base(path),
 		Ch:      make(chan *Call),
 		tempDir: tempDir,
 	}
 
-	id, err := server.registerProxy(p)
-	if err != nil {
-		return nil, err
-	}
+	server.registerProxy(p)
 
 	return p, compileClient(path, []string{
 		"main.server=" + server.URL,
-		"main.id=" + id,
 	})
 }
 
@@ -95,9 +95,7 @@ func (p *Proxy) Close() (err error) {
 	defer func() {
 		serverLock.Lock()
 		defer serverLock.Unlock()
-		if deregisterErr := serverInstance.deregisterProxy(p); deregisterErr != nil {
-			err = deregisterErr
-		}
+		serverInstance.deregisterProxy(p)
 	}()
 	return err
 }

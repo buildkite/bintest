@@ -10,7 +10,9 @@ import (
 	"time"
 )
 
-const clientSrc = `package main
+const (
+	serverEnv = ``
+	clientSrc = `package main
 
 import (
 	"github.com/lox/bintest/proxy/client"
@@ -20,11 +22,10 @@ import (
 var (
 	debug  string
 	server string
-	id     string
 )
 
 func main() {
-	c := client.New(id, server)
+	c := client.New(server)
 
 	if debug == "true" {
 		c.Debug = true
@@ -33,6 +34,7 @@ func main() {
 	os.Exit(c.Run())
 }
 `
+)
 
 func compile(dest string, src string, vars []string) error {
 	args := []string{
@@ -40,7 +42,7 @@ func compile(dest string, src string, vars []string) error {
 		"-o", dest,
 	}
 
-	if len(vars) > 0 {
+	if len(vars) > 0 || Debug {
 		args = append(args, "-ldflags")
 
 		for idx, val := range vars {

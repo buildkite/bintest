@@ -1,20 +1,20 @@
 package proxy
 
 import (
-	"crypto/sha1"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+// A single instance of the server is run for each golang process. The server has sessions which then
+// have proxy calls within those sessions.
 
 var (
 	serverInstance *server
@@ -34,9 +34,6 @@ func startServer() (*server, error) {
 		s := &server{
 			Listener: l,
 			URL:      "http://" + l.Addr().String(),
-
-			proxies:  map[string]*Proxy{},
-			handlers: map[int64]callHandler{},
 		}
 
 		debugf("[server] Starting server on %s", l.Addr().String())
@@ -65,103 +62,21 @@ func StopServer() error {
 }
 
 type server struct {
-	sync.Mutex
 	net.Listener
 	URL string
 
-	proxies  map[string]*Proxy
-	handlers map[int64]callHandler
+	proxies      sync.Map
+	callHandlers sync.Map
 }
 
-func (s *server) registerProxy(p *Proxy) (string, error) {
-	s.Lock()
-	defer s.Unlock()
-
-	id := fmt.Sprintf("%x", sha1.Sum([]byte(p.Path)))
-
-	debugf("[server] Registering proxy %s as %s", p.Path, id)
-	s.proxies[id] = p
-
-	return id, nil
+func (s *server) registerProxy(p *Proxy) {
+	debugf("[server] Registering proxy %s", p.Name)
+	s.proxies.Store(p.Name, p)
 }
 
-func (s *server) deregisterProxy(p *Proxy) error {
-	s.Lock()
-	defer s.Unlock()
-
-	id := fmt.Sprintf("%x", sha1.Sum([]byte(p.Path)))
-
-	debugf("[server] Deregistering proxy %s", id)
-	delete(s.proxies, id)
-
-	return nil
-}
-
-func (s *server) serveInitialCall(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ID    string
-		Args  []string
-		Env   []string
-		Dir   string
-		Stdin bool
-	}
-
-	// parse the posted args end env
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	s.Lock()
-
-	// find the proxy instance in the server
-	proxy, ok := s.proxies[req.ID]
-	if !ok {
-		debugf("[server] ERROR: No proxy found for %s", req.ID)
-		s.Unlock()
-		http.Error(w, "No proxy found for "+req.ID, http.StatusNotFound)
-		return
-	}
-
-	debugf("[server] New proxy call for %s (%s)", filepath.Base(proxy.Path), req.ID)
-
-	// these pipes connect the call to the various http request/responses
-	outR, outW := io.Pipe()
-	errR, errW := io.Pipe()
-	inR, inW := io.Pipe()
-
-	// create a custom handler with the id for subsequent requests to hit
-	call := proxy.newCall(req.Args, req.Env, req.Dir)
-	call.Stdout = outW
-	call.Stderr = errW
-	call.Stdin = inR
-
-	debugf("[server] Returning call id %d", call.ID)
-
-	// close off stdin if it's not going to be provided
-	if !req.Stdin {
-		debugf("[server] Ignoring stdin, none provided")
-		_ = inW.Close()
-	}
-
-	s.handlers[call.ID] = callHandler{
-		call:   call,
-		stdout: outR,
-		stderr: errR,
-		stdin:  inW,
-	}
-
-	s.Unlock()
-
-	// dispatch to whatever handles the call
-	proxy.Ch <- call
-
-	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(&struct {
-		ID int64
-	}{
-		ID: call.ID,
-	})
+func (s *server) deregisterProxy(p *Proxy) {
+	debugf("[server] Deregistering proxy %s", p.Name)
+	s.proxies.Delete(p.Name)
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -175,33 +90,96 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	debugf("[server] %s %s", r.Method, r.URL.Path)
 
-	if r.URL.Path == "/" {
-		s.serveInitialCall(w, r)
+	if r.URL.Path == `/calls/new` {
+		s.handleNewCall(w, r)
 		return
 	}
 
-	id, err := strconv.ParseInt(strings.TrimPrefix(path.Dir(r.URL.Path), "/"), 10, 64)
+	callId, err := strconv.ParseInt(strings.TrimPrefix(path.Dir(r.URL.Path), "/calls/"), 10, 64)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	ch, ok := s.handlers[id]
+	// dispatch the request to a handler with the given id
+	handler, ok := s.callHandlers.Load(callId)
 	if !ok {
 		http.Error(w, "Unknown handler", http.StatusNotFound)
 		return
 	}
 
-	ch.ServeHTTP(w, r)
+	handler.(*callHandler).ServeHTTP(w, r)
 	debugf("[server] END %s (%v)", r.URL.Path, time.Now().Sub(start))
+}
+
+func (s *server) handleNewCall(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name  string
+		Args  []string
+		Env   []string
+		Dir   string
+		Stdin bool
+	}
+
+	// parse the posted args end env
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// find the proxy instance in the server
+	proxy, ok := s.proxies.Load(req.Name)
+	if !ok {
+		debugf("[server] ERROR: No proxy found for %s", req.Name)
+		http.Error(w, "No proxy found for "+req.Name, http.StatusNotFound)
+		return
+	}
+
+	debugf("[server] New call for %s", req.Name)
+
+	// these pipes connect the call to the various http request/responses
+	outR, outW := io.Pipe()
+	errR, errW := io.Pipe()
+	inR, inW := io.Pipe()
+
+	// create a custom handler with the id for subsequent requests to hit
+	call := proxy.(*Proxy).newCall(req.Args, req.Env, req.Dir)
+	call.Stdout = outW
+	call.Stderr = errW
+	call.Stdin = inR
+
+	debugf("[server] Returning call id %d", call.ID)
+
+	// close off stdin if it's not going to be provided
+	if !req.Stdin {
+		debugf("[server] Ignoring stdin, none provided")
+		_ = inW.Close()
+	}
+
+	// save the handler for subsequent requests
+	s.callHandlers.Store(call.ID, &callHandler{
+		call:   call,
+		stdout: outR,
+		stderr: errR,
+		stdin:  inW,
+	})
+
+	// dispatch to whatever handles the call
+	proxy.(*Proxy).Ch <- call
+
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(&struct {
+		ID int64
+	}{
+		ID: call.ID,
+	})
 }
 
 type callHandler struct {
 	sync.WaitGroup
-	call   *Call
-	stdout *io.PipeReader
-	stderr *io.PipeReader
-	stdin  *io.PipeWriter
+	call           *Call
+	stdout, stderr *io.PipeReader
+	stdin          *io.PipeWriter
 }
 
 func (ch *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

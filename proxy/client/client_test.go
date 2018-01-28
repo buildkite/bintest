@@ -3,6 +3,7 @@ package client_test
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,18 +14,21 @@ import (
 func TestClient(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case `/`:
+		case `/calls/new`:
 			fmt.Fprintln(w, `{"ID": 1234567}`)
-		case `/1234567/stdout`:
+		case `/calls/1234567/stdout`:
 			fmt.Fprintln(w, `Success (stdout)!`)
-		case `/1234567/stderr`:
+		case `/calls/1234567/stderr`:
 			fmt.Fprintln(w, `Success (stderr)!`)
-		case `/1234567/exitcode`:
+		case `/calls/1234567/exitcode`:
 			fmt.Fprintln(w, `0`)
+		case `/debug`:
+			out, _ := ioutil.ReadAll(r.Body)
+			_ = r.Body.Close()
+			t.Logf("%s", out)
 		default:
-			http.Error(w,
-				fmt.Sprintf("Unhandled request url %s", r.URL.Path),
-				http.StatusNotFound)
+			t.Logf("No handler for %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer ts.Close()
@@ -33,8 +37,9 @@ func TestClient(t *testing.T) {
 	stderr := &closingBuffer{}
 
 	c := client.Client{
+		Debug:  false,
 		URL:    ts.URL,
-		ID:     "myproxy",
+		Name:   "llamasbin",
 		Args:   []string{"llamas"},
 		Stdout: stdout,
 		Stderr: stderr,

@@ -10,8 +10,10 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/lox/bintest/proxy"
@@ -54,6 +56,7 @@ func tearDown(t *testing.T) func() {
 		if err := proxy.StopServer(); err != nil {
 			t.Fatal(err)
 		}
+		time.Sleep(time.Millisecond * 10)
 		leakTest()
 	}
 }
@@ -74,7 +77,10 @@ func TestProxyWithStdin(t *testing.T) {
 	cmd.Stdin = strings.NewReader("This is my stdin\n")
 	cmd.Stdout = outBuf
 	cmd.Stderr = os.Stderr
-	cmd.Start()
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	fmt.Fprintln(call.Stdout, "Copied to stdout")
@@ -103,9 +109,13 @@ func TestProxyWithStdout(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
+	cmd.Env = []string{}
 	cmd.Stdout = outBuf
 	cmd.Stderr = os.Stderr
-	cmd.Start()
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	fmt.Fprintln(call.Stdout, "Yup!")
@@ -434,6 +444,39 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 
 	if err = cmd.Wait(); err == nil {
 		t.Fatalf("Expected an error")
+	}
+}
+
+func TestProxyCallingInParallel(t *testing.T) {
+	// defer tearDown(t)()
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			proxy, err := proxy.Compile(fmt.Sprintf("test%d", i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer proxy.Close()
+
+			cmd := exec.Command(proxy.Path)
+			cmd.Env = []string{}
+
+			if err = cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+
+			call := <-proxy.Ch
+			call.Exit(0)
+
+			if err = cmd.Wait(); err != nil {
+				t.Fatal(err)
+			}
+		}(i)
 	}
 }
 

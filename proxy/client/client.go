@@ -15,8 +15,8 @@ import (
 type Client struct {
 	Debug bool
 	URL   string
-	ID    string
 
+	Name       string
 	Args       []string
 	WorkingDir string
 	Env        []string
@@ -26,7 +26,7 @@ type Client struct {
 	Stderr io.WriteCloser
 }
 
-func New(ID string, URL string) *Client {
+func New(URL string) *Client {
 	wd, err := os.Getwd()
 	if err != nil {
 		panic(err)
@@ -34,7 +34,7 @@ func New(ID string, URL string) *Client {
 
 	return &Client{
 		URL:        URL,
-		ID:         ID,
+		Name:       filepath.Base(os.Args[0]),
 		Args:       os.Args[1:],
 		Env:        os.Environ(),
 		WorkingDir: wd,
@@ -53,13 +53,13 @@ func (c *Client) Run() int {
 
 	// Data sent to the server about the local invocation
 	var req = struct {
-		ID    string
+		Name  string
 		Args  []string
 		Env   []string
 		Dir   string
 		Stdin bool
 	}{
-		c.ID,
+		c.Name,
 		c.Args,
 		c.Env,
 		c.WorkingDir,
@@ -73,12 +73,12 @@ func (c *Client) Run() int {
 
 	// We fire off an initial request to start the flow, and expect an integer
 	// back that we will use in subsequent requests
-	if err := c.postJSON("/", req, &resp); err != nil {
-		c.debugf("Err from server: %v", err)
+	if err := c.postJSON(`calls/new`, req, &resp); err != nil {
+		c.debugf("Error from server: %v", err)
 		panic(err)
 	}
 
-	c.debugf("Got ID %d from server", resp.ID)
+	c.debugf("Got call identifier of %d", resp.ID)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -102,38 +102,39 @@ func (c *Client) Run() int {
 				c.debugf("Done copying from Stdin")
 			}()
 
-			stdinReq, stdinErr := http.NewRequest("POST", fmt.Sprintf("%s/%d/stdin", c.URL, resp.ID), r)
+			stdinReq, stdinErr := http.NewRequest("POST", fmt.Sprintf("%s/calls/%d/stdin", c.URL, resp.ID), r)
 			if stdinErr != nil {
 				panic(stdinErr)
 			}
 
-			c.debugf("Posting to /stdin")
 			resp, err := http.DefaultClient.Do(stdinReq)
 			if err != nil {
 				panic(err)
 			}
 
 			if resp.StatusCode != http.StatusOK {
-				panic(fmt.Sprintf("Server response was not OK: %s (%d)",
-					resp.Status, resp.StatusCode))
+				panic(fmt.Errorf(
+					"Request to %s failed: %s",
+					resp.Request.URL.String(),
+					resp.Status))
 			}
 		}()
 	} else if c.Stdin != nil {
 		c.debugf("Closing stdin, nothing to read")
 		_ = c.Stdin.Close()
 	} else {
-		c.debugf("Skipping nil stdin")
+		c.debugf("No stdin, skipping")
 	}
 
 	go func() {
-		err := c.getStream(fmt.Sprintf("%d/stdout", resp.ID), c.Stdout, &wg)
+		err := c.getStream(fmt.Sprintf("/calls/%d/stdout", resp.ID), c.Stdout, &wg)
 		if err != nil {
 			panic(err)
 		}
 	}()
 
 	go func() {
-		err := c.getStream(fmt.Sprintf("%d/stderr", resp.ID), c.Stderr, &wg)
+		err := c.getStream(fmt.Sprintf("/calls/%d/stderr", resp.ID), c.Stderr, &wg)
 		if err != nil {
 			panic(err)
 		}
@@ -143,7 +144,7 @@ func (c *Client) Run() int {
 	wg.Wait()
 	c.debugf("Streams finished, waiting for exit code")
 
-	exitCodeResp, err := http.Get(fmt.Sprintf("%s/%d/exitcode", c.URL, resp.ID))
+	exitCodeResp, err := http.Get(fmt.Sprintf("%s/calls/%d/exitcode", c.URL, resp.ID))
 	if err != nil {
 		panic(err)
 	}
@@ -185,31 +186,32 @@ func (c *Client) isStdinReadable() bool {
 
 func (c *Client) debugf(pattern string, args ...interface{}) {
 	if c.Debug {
-		format := fmt.Sprintf("[client %s] %s", filepath.Base(os.Args[0]), pattern)
+		format := fmt.Sprintf("[client %s] %s", c.Name, pattern)
 		b := bytes.NewBufferString(fmt.Sprintf(format, args...))
-		u := fmt.Sprintf("%s/debug", c.URL)
+		u := c.URL + "/debug"
 
 		resp, err := http.Post(u, "text/plain; charset=utf-8", b)
 		if err != nil {
-			log.Printf("Error posting to debug: %#v", err)
-		}
-		defer func() {
+			log.Printf("Error posting to debug: %v", err)
+		} else {
 			_ = resp.Body.Close()
-		}()
+		}
 	}
 }
 
 func (c *Client) get(path string) (*http.Response, error) {
-	c.debugf("GET /%s", path)
+	c.debugf("GET %s", path)
 
-	resp, err := http.Get(c.URL + "/" + path)
+	resp, err := http.Get(c.URL + path)
 	if err != nil {
 		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Server response was not OK: %s (%d)",
-			resp.Status, resp.StatusCode)
+		return nil, fmt.Errorf(
+			"Request to %s failed: %s",
+			resp.Request.URL.String(),
+			resp.Status)
 	}
 
 	return resp, err
@@ -240,7 +242,7 @@ func (c *Client) postJSON(path string, from interface{}, into interface{}) (err 
 
 	c.debugf("POST %s <- json %+v", path, from)
 
-	resp, respErr := http.Post(c.URL, "application/json; charset=utf-8", body)
+	resp, respErr := http.Post(c.URL+"/"+path, "application/json; charset=utf-8", body)
 	if respErr != nil {
 		return err
 	}
@@ -251,8 +253,10 @@ func (c *Client) postJSON(path string, from interface{}, into interface{}) (err 
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Server response was not OK: %s (%d)",
-			resp.Status, resp.StatusCode)
+		return fmt.Errorf(
+			"Request to %s failed: %s",
+			resp.Request.URL.String(),
+			resp.Status)
 	}
 
 	// Receive the body as JSON
