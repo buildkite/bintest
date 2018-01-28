@@ -127,6 +127,7 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.PassthroughToLocalCommand()
 	m.Expect("hello", "world")
@@ -191,6 +192,7 @@ func TestMockWithCallFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer m.Close()
 
 	m.Expect("hello", "world").AndCallFunc(func(c *proxy.Call) {
 		if !reflect.DeepEqual(c.Args, []string{"hello", "world"}) {
@@ -335,9 +337,6 @@ func TestMockExpectWithMatcherFunc(t *testing.T) {
 }
 
 func TestMockExpectWithBefore(t *testing.T) {
-	bintest.Debug = true
-	proxy.Debug = true
-
 	m, err := bintest.NewMock("true")
 	if err != nil {
 		t.Fatal(err)

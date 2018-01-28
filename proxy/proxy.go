@@ -83,6 +83,8 @@ func (p *Proxy) newCall(args []string, env []string, dir string) *Call {
 
 // Close the proxy and remove the temp directory
 func (p *Proxy) Close() (err error) {
+	close(p.Ch)
+
 	defer func() {
 		if p.tempDir != "" {
 			if removeErr := os.RemoveAll(p.tempDir); removeErr != nil {
