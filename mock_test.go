@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/lox/bintest"
 	"github.com/lox/bintest/proxy"
 )
@@ -24,7 +25,19 @@ func (t *testingT) Errorf(format string, args ...interface{}) {
 	t.Errors = append(t.Errors, fmt.Sprintf(format, args...))
 }
 
+func tearDown(t *testing.T) func() {
+	leakTest := leaktest.Check(t)
+	return func() {
+		if err := proxy.StopServer(); err != nil {
+			t.Fatal(err)
+		}
+		leakTest()
+	}
+}
+
 func TestCallingMockWithStdErrExpected(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("test")
 	if err != nil {
 		t.Fatal(err)
@@ -50,6 +63,8 @@ func TestCallingMockWithStdErrExpected(t *testing.T) {
 }
 
 func TestCallingMockWithStdOutExpected(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("test")
 	if err != nil {
 		t.Fatal(err)
@@ -76,6 +91,8 @@ func TestCallingMockWithStdOutExpected(t *testing.T) {
 }
 
 func TestCallingMockWithNoExpectationsSet(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("test")
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +112,8 @@ func TestCallingMockWithNoExpectationsSet(t *testing.T) {
 }
 
 func TestCallingMockWithExpectationsSet(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("test")
 	if err != nil {
 		t.Fatal(err)
@@ -123,6 +142,8 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 }
 
 func TestMockWithPassthroughToLocalCommand(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("echo")
 	if err != nil {
 		t.Fatal(err)
@@ -161,6 +182,8 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.label, func(t *testing.T) {
+			defer tearDown(t)()
+
 			m, err := bintest.NewMock("test")
 			if err != nil {
 				t.Fatal(err)
@@ -188,6 +211,8 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 }
 
 func TestMockWithCallFunc(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("echo")
 	if err != nil {
 		t.Fatal(err)
@@ -218,6 +243,8 @@ func TestMockWithCallFunc(t *testing.T) {
 }
 
 func TestMockRequiresExpectations(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("llamas")
 	if err != nil {
 		t.Fatal(err)
@@ -235,6 +262,8 @@ func TestMockRequiresExpectations(t *testing.T) {
 }
 
 func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("llamas")
 	if err != nil {
 		t.Fatal(err)
@@ -259,6 +288,8 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 }
 
 func TestMockOptionally(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("llamas")
 	if err != nil {
 		t.Fatal(err)
@@ -297,6 +328,8 @@ func TestMockMultipleExpects(t *testing.T) {
 }
 
 func TestMockExpectWithNoArguments(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("llamas")
 	if err != nil {
 		t.Fatal(err)
@@ -314,6 +347,8 @@ func TestMockExpectWithNoArguments(t *testing.T) {
 }
 
 func TestMockExpectWithMatcherFunc(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("llamas")
 	if err != nil {
 		t.Fatal(err)
@@ -337,6 +372,8 @@ func TestMockExpectWithMatcherFunc(t *testing.T) {
 }
 
 func TestMockExpectWithBefore(t *testing.T) {
+	defer tearDown(t)()
+
 	m, err := bintest.NewMock("true")
 	if err != nil {
 		t.Fatal(err)

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/lox/bintest/proxy"
 )
 
@@ -47,7 +48,19 @@ func ExampleCompile() {
 	// Output: Llama party! 🎉
 }
 
+func tearDown(t *testing.T) func() {
+	leakTest := leaktest.Check(t)
+	return func() {
+		if err := proxy.StopServer(); err != nil {
+			t.Fatal(err)
+		}
+		leakTest()
+	}
+}
+
 func TestProxyWithStdin(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -79,6 +92,8 @@ func TestProxyWithStdin(t *testing.T) {
 }
 
 func TestProxyWithStdout(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +121,8 @@ func TestProxyWithStdout(t *testing.T) {
 }
 
 func TestProxyWithStderr(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +149,8 @@ func TestProxyWithStderr(t *testing.T) {
 }
 
 func TestProxyWithStdoutAndStderr(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +193,8 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 }
 
 func TestProxyWithNoOutput(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -192,6 +213,8 @@ func TestProxyWithNoOutput(t *testing.T) {
 }
 
 func TestProxyWithLotsOfOutput(t *testing.T) {
+	defer tearDown(t)()
+
 	var expected string
 	for i := 0; i < 10; i++ {
 		expected += strings.Repeat("llamas", 10)
@@ -229,6 +252,8 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 }
 
 func TestProxyWithNonZeroExitCode(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -258,6 +283,8 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 }
 
 func TestProxyCloseRemovesFile(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -291,6 +318,8 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 }
 
 func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
+	defer tearDown(t)()
+
 	tempDir, err := ioutil.TempDir("", "proxy-wd-test")
 	if err != nil {
 		t.Fatal(err)
@@ -321,6 +350,8 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -350,6 +381,8 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithStdin(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -381,6 +414,8 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
+	defer tearDown(t)()
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
