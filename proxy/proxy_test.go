@@ -28,7 +28,7 @@ func ExampleCompile() {
 	defer p.Close()
 
 	// call the proxy like a normal binary in the background
-	cmd := exec.Command(p.Path)
+	cmd := exec.Command(p.Path, "rev-parse")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -180,7 +180,7 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 	}
 
 	call := <-proxy.Ch
-	if !reflect.DeepEqual(call.Args, []string{"test", "arguments"}) {
+	if !reflect.DeepEqual(call.Args[1:], []string{"test", "arguments"}) {
 		t.Errorf("Unexpected args %#v", call.Args)
 		return
 	}
@@ -447,8 +447,32 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 	}
 }
 
+func TestProxyWithPassthroughWithTimeout(t *testing.T) {
+	defer tearDown(t)()
+
+	proxy, err := proxy.Compile("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	cmd := exec.Command(proxy.Path, "10000")
+	cmd.Env = []string{}
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	call := <-proxy.Ch
+	call.PassthroughWithTimeout(`/bin/sleep`, time.Millisecond*100)
+
+	if err = cmd.Wait(); err == nil {
+		t.Fatalf("Expected an error!")
+	}
+}
+
 func TestProxyCallingInParallel(t *testing.T) {
-	// defer tearDown(t)()
+	defer tearDown(t)()
 
 	var wg sync.WaitGroup
 
@@ -478,6 +502,8 @@ func TestProxyCallingInParallel(t *testing.T) {
 			}
 		}(i)
 	}
+
+	wg.Wait()
 }
 
 func BenchmarkCreatingProxies(b *testing.B) {

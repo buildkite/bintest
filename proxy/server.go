@@ -7,8 +7,8 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -79,6 +79,10 @@ func (s *server) deregisterProxy(p *Proxy) {
 	s.proxies.Delete(p.Path)
 }
 
+var (
+	callRouteRegex = regexp.MustCompile(`^/calls/(\d+)/(stdout|stderr|stdin|exitcode)$`)
+)
+
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/debug" {
 		body, _ := ioutil.ReadAll(r.Body)
@@ -95,29 +99,39 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	callId, err := strconv.ParseInt(strings.TrimPrefix(path.Dir(r.URL.Path), "/calls/"), 10, 64)
+	matches := callRouteRegex.FindStringSubmatch(r.URL.Path)
+
+	if len(matches) == 0 {
+		http.Error(w, "Unknown route "+r.URL.Path, http.StatusBadRequest)
+		return
+	}
+
+	pid, err := strconv.ParseInt(matches[1], 10, 64)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// dispatch the request to a handler with the given id
-	handler, ok := s.callHandlers.Load(callId)
+	handler, ok := s.callHandlers.Load(int(pid))
 	if !ok {
+		debugf("[server] ERROR: No call handler found for pid %d", pid)
 		http.Error(w, "Unknown handler", http.StatusNotFound)
 		return
 	}
+
+	debugf("[server] Found handler for %v", handler.(*callHandler).call.Args)
 
 	handler.(*callHandler).ServeHTTP(w, r)
 	debugf("[server] END %s (%v)", r.URL.Path, time.Now().Sub(start))
 }
 
 type NewCallRequest struct {
-	Path  string
-	Args  []string
-	Env   []string
-	Dir   string
-	Stdin bool
+	PID      int
+	Args     []string
+	Env      []string
+	Dir      string
+	HasStdin bool
 }
 
 func (s *server) handleNewCall(w http.ResponseWriter, r *http.Request) {
@@ -129,15 +143,15 @@ func (s *server) handleNewCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// find the proxy instance in the server
-	proxy, ok := s.proxies.Load(req.Path)
+	// find the proxy instance in the server for the given path
+	proxy, ok := s.proxies.Load(req.Args[0])
 	if !ok {
-		debugf("[server] ERROR: No proxy found for %s", req.Path)
-		http.Error(w, "No proxy found for "+req.Path, http.StatusNotFound)
+		debugf("[server] ERROR: No proxy found for path %s", req.Args[0])
+		http.Error(w, "No proxy found for "+req.Args[0], http.StatusNotFound)
 		return
+	} else {
+		debugf("[server] Found proxy for path %s", req.Args[0])
 	}
-
-	debugf("[server] New call for %s", req.Path)
 
 	// these pipes connect the call to the various http request/responses
 	outR, outW := io.Pipe()
@@ -145,36 +159,28 @@ func (s *server) handleNewCall(w http.ResponseWriter, r *http.Request) {
 	inR, inW := io.Pipe()
 
 	// create a custom handler with the id for subsequent requests to hit
-	call := proxy.(*Proxy).newCall(req.Args, req.Env, req.Dir)
+	call := proxy.(*Proxy).newCall(req.PID, req.Args, req.Env, req.Dir)
 	call.Stdout = outW
 	call.Stderr = errW
 	call.Stdin = inR
 
-	debugf("[server] Returning call id %d", call.ID)
-
 	// close off stdin if it's not going to be provided
-	if !req.Stdin {
-		debugf("[server] Ignoring stdin, none provided")
+	if !req.HasStdin {
 		_ = inW.Close()
 	}
 
 	// save the handler for subsequent requests
-	s.callHandlers.Store(call.ID, &callHandler{
+	s.callHandlers.Store(int(call.PID), &callHandler{
 		call:   call,
 		stdout: outR,
 		stderr: errR,
 		stdin:  inW,
 	})
 
+	debugf("[server] Registered call handler for pid %d", call.PID)
+
 	// dispatch to whatever handles the call
 	proxy.(*Proxy).Ch <- call
-
-	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(&struct {
-		ID int64
-	}{
-		ID: call.ID,
-	})
 }
 
 type callHandler struct {
@@ -204,7 +210,7 @@ func (ch *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		debugf("[server] Finished copy of stdin")
 
 	case "exitcode":
-		debugf("[server] Waiting for exitcode to send")
+		debugf("[server] Blocking on call for exitcode")
 		exitCode := <-ch.call.exitCodeCh
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(&exitCode)

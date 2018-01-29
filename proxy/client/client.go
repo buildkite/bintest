@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/lox/bintest/proxy"
@@ -18,10 +18,10 @@ type Client struct {
 	Debug bool
 	URL   string
 
-	Path       string
-	Args       []string
-	WorkingDir string
-	Env        []string
+	Args []string
+	Dir  string
+	Env  []string
+	PID  int
 
 	Stdin  io.ReadCloser
 	Stdout io.WriteCloser
@@ -35,46 +35,34 @@ func New(URL string) *Client {
 	}
 
 	return &Client{
-		URL:        URL,
-		Path:       os.Args[0],
-		Args:       os.Args[1:],
-		Env:        os.Environ(),
-		WorkingDir: wd,
-		Stdin:      os.Stdin,
-		Stdout:     os.Stdout,
-		Stderr:     os.Stderr,
+		URL:    URL,
+		Args:   os.Args,
+		Env:    os.Environ(),
+		Dir:    wd,
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		PID:    os.Getpid(),
 	}
 }
 
 // Run the client, panics on error and returns an exit code on success
 func (c *Client) Run() int {
-	c.debugf("Connecting to %s", c.URL)
-	defer func() {
-		c.debugf("Finished process")
-	}()
+	c.debugf("Running %s", strings.Join(c.Args, " "))
 
-	// Data sent to the server about the local invocation
 	var req = proxy.NewCallRequest{
-		c.Path,
-		c.Args,
-		c.Env,
-		c.WorkingDir,
-		c.isStdinReadable(),
+		PID:      c.PID,
+		Args:     c.Args,
+		Env:      c.Env,
+		Dir:      c.Dir,
+		HasStdin: c.isStdinReadable(),
 	}
 
-	// Reply from the server
-	var resp struct {
-		ID int64
-	}
-
-	// We fire off an initial request to start the flow, and expect an integer
-	// back that we will use in subsequent requests
-	if err := c.postJSON(`calls/new`, req, &resp); err != nil {
+	// Fire off an initial request to start the flow
+	if err := c.postJSON(c.URL+`/calls/new`, req); err != nil {
 		c.debugf("Error from server: %v", err)
 		panic(err)
 	}
-
-	c.debugf("Got call identifier of %d", resp.ID)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -98,7 +86,7 @@ func (c *Client) Run() int {
 				c.debugf("Done copying from Stdin")
 			}()
 
-			stdinReq, stdinErr := http.NewRequest("POST", fmt.Sprintf("%s/calls/%d/stdin", c.URL, resp.ID), r)
+			stdinReq, stdinErr := http.NewRequest("POST", fmt.Sprintf("%s/calls/%d/stdin", c.URL, req.PID), r)
 			if stdinErr != nil {
 				panic(stdinErr)
 			}
@@ -123,14 +111,16 @@ func (c *Client) Run() int {
 	}
 
 	go func() {
-		err := c.getStream(fmt.Sprintf("/calls/%d/stdout", resp.ID), c.Stdout, &wg)
+		c.debugf("Reading stdout")
+		err := c.getStream(fmt.Sprintf("/calls/%d/stdout", req.PID), c.Stdout, &wg)
 		if err != nil {
 			panic(err)
 		}
 	}()
 
 	go func() {
-		err := c.getStream(fmt.Sprintf("/calls/%d/stderr", resp.ID), c.Stderr, &wg)
+		c.debugf("Reading stderr")
+		err := c.getStream(fmt.Sprintf("/calls/%d/stderr", req.PID), c.Stderr, &wg)
 		if err != nil {
 			panic(err)
 		}
@@ -140,7 +130,7 @@ func (c *Client) Run() int {
 	wg.Wait()
 	c.debugf("Streams finished, waiting for exit code")
 
-	exitCodeResp, err := http.Get(fmt.Sprintf("%s/calls/%d/exitcode", c.URL, resp.ID))
+	exitCodeResp, err := http.Get(fmt.Sprintf("%s/calls/%d/exitcode", c.URL, req.PID))
 	if err != nil {
 		panic(err)
 	}
@@ -164,7 +154,6 @@ func (c *Client) isStdinReadable() bool {
 	if stdinFile, ok := c.Stdin.(*os.File); ok {
 		stat, _ := stdinFile.Stat()
 		if (stat.Mode() & os.ModeCharDevice) != 0 {
-			c.debugf("Stdin is a terminal")
 			return false
 		}
 
@@ -173,7 +162,6 @@ func (c *Client) isStdinReadable() bool {
 			return true
 		}
 	} else {
-		c.debugf("Stdin is a plain io.Reader")
 		return true
 	}
 
@@ -182,7 +170,8 @@ func (c *Client) isStdinReadable() bool {
 
 func (c *Client) debugf(pattern string, args ...interface{}) {
 	if c.Debug {
-		format := fmt.Sprintf("[client %s] %s", filepath.Base(c.Path), pattern)
+		format := fmt.Sprintf("[client %d] %s", c.PID, pattern)
+
 		b := bytes.NewBufferString(fmt.Sprintf(format, args...))
 		u := c.URL + "/debug"
 
@@ -196,8 +185,6 @@ func (c *Client) debugf(pattern string, args ...interface{}) {
 }
 
 func (c *Client) get(path string) (*http.Response, error) {
-	c.debugf("GET %s", path)
-
 	resp, err := http.Get(c.URL + path)
 	if err != nil {
 		return nil, err
@@ -230,15 +217,13 @@ func (c *Client) getStream(path string, w io.WriteCloser, wg *sync.WaitGroup) er
 	return nil
 }
 
-func (c *Client) postJSON(path string, from interface{}, into interface{}) (err error) {
+func (c *Client) postJSON(url string, from interface{}) (err error) {
 	body := new(bytes.Buffer)
 	if err = json.NewEncoder(body).Encode(from); err != nil {
 		return err
 	}
 
-	c.debugf("POST %s <- json %+v", path, from)
-
-	resp, respErr := http.Post(c.URL+"/"+path, "application/json; charset=utf-8", body)
+	resp, respErr := http.Post(url, "application/json; charset=utf-8", body)
 	if respErr != nil {
 		return err
 	}
@@ -253,11 +238,6 @@ func (c *Client) postJSON(path string, from interface{}, into interface{}) (err 
 			"Request to %s failed: %s",
 			resp.Request.URL.String(),
 			resp.Status)
-	}
-
-	// Receive the body as JSON
-	if err = json.NewDecoder(resp.Body).Decode(&into); err != nil {
-		return err
 	}
 
 	return nil

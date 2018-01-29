@@ -15,7 +15,7 @@ func TestClient(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case `/calls/new`:
-			fmt.Fprintln(w, `{"ID": 1234567}`)
+			w.WriteHeader(http.StatusOK)
 		case `/calls/1234567/stdout`:
 			fmt.Fprintln(w, `Success (stdout)!`)
 		case `/calls/1234567/stderr`:
@@ -39,8 +39,8 @@ func TestClient(t *testing.T) {
 	c := client.Client{
 		Debug:  false,
 		URL:    ts.URL,
-		Path:   "/tmp/llamasbin",
-		Args:   []string{"llamas"},
+		PID:    1234567,
+		Args:   []string{"/tmp/llamasbin", "llamas"},
 		Stdout: stdout,
 		Stderr: stderr,
 	}

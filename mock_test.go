@@ -2,9 +2,12 @@ package bintest_test
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/fortytw2/leaktest"
@@ -401,4 +404,41 @@ func TestMockExpectWithBefore(t *testing.T) {
 	if m.Check(t) == false {
 		t.Errorf("Assertions should have passed")
 	}
+}
+
+func TestMockParallelCommandsWithPassthrough(t *testing.T) {
+	defer tearDown(t)()
+
+	var wg sync.WaitGroup
+
+	for i := 1; i < 3; i++ {
+		tmpDir, err := ioutil.TempDir("", "parallel-mocks")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		m, err := bintest.NewMock(filepath.Join(tmpDir, "sleep"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer m.Close()
+
+		m.Expect(fmt.Sprintf("%d", i)).Exactly(1).AndPassthroughToLocalCommand("/bin/sleep")
+
+		wg.Add(1)
+		go func(path string, i int) {
+			defer wg.Done()
+
+			_, err := exec.Command(path, fmt.Sprintf("%d", i)).CombinedOutput()
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+
+			if !m.Check(t) {
+				t.Errorf("Assertions should have passed")
+			}
+		}(m.Path, i)
+	}
+
+	wg.Wait()
 }

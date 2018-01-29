@@ -58,7 +58,6 @@ func compile(dest string, src string, vars []string) error {
 
 	t := time.Now()
 
-	debugf("[compiler] go %s %s", strings.Join(args, " "), src)
 	output, err := exec.Command("go", append(args, src)...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Compile of %s failed: %s", src, output)

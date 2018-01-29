@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,9 +12,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 )
 
 // Proxy provides a way to programatically respond to invocations of a compiled
@@ -67,9 +69,12 @@ func Compile(path string) (*Proxy, error) {
 	})
 }
 
-func (p *Proxy) newCall(args []string, env []string, dir string) *Call {
+func (p *Proxy) newCall(pid int, args []string, env []string, dir string) *Call {
+	atomic.AddInt64(&p.CallCount, 1)
+
 	return &Call{
-		ID:         atomic.AddInt64(&p.CallCount, 1),
+		PID:        pid,
+		Name:       filepath.Base(p.Path),
 		Args:       args,
 		Env:        env,
 		Dir:        dir,
@@ -99,9 +104,8 @@ func (p *Proxy) Close() (err error) {
 
 // Call is created for every call to the proxied binary
 type Call struct {
-	sync.Mutex
-
-	ID   int64
+	PID  int
+	Name string
 	Args []string
 	Env  []string
 	Dir  string
@@ -115,9 +119,9 @@ type Call struct {
 	// Stdin is the input reader for stdin from the proxied binary
 	Stdin io.ReadCloser `json:"-"`
 
-	// proxy      *Proxy
 	exitCodeCh chan int
 	doneCh     chan struct{}
+	done       uint32
 }
 
 func (c *Call) GetEnv(key string) string {
@@ -132,6 +136,12 @@ func (c *Call) GetEnv(key string) string {
 
 // Exit finishes the call and the proxied binary returns the exit code
 func (c *Call) Exit(code int) {
+	if !atomic.CompareAndSwapUint32(&c.done, 0, 1) {
+		panic("Can't call Exit() on a Call that is already finished")
+	}
+
+	c.debugf("Sending exit code %d to server", code)
+
 	_ = c.Stderr.Close()
 	_ = c.Stdout.Close()
 
@@ -142,30 +152,91 @@ func (c *Call) Exit(code int) {
 	<-c.doneCh
 }
 
+// Fatal exits the call and returns the passed error. If it's a exec.ExitError the exit code is used
+func (c *Call) Fatal(err error) {
+	c.debugf("Fatal error: %v", err)
+	fmt.Fprintf(c.Stderr, "Fatal error: %v", err)
+
+	if exitError, ok := err.(*exec.ExitError); ok {
+		c.Exit(exitError.Sys().(syscall.WaitStatus).ExitStatus())
+	} else {
+		c.Exit(1)
+	}
+}
+
 // Passthrough invokes another local binary and returns the results
 func (c *Call) Passthrough(path string) {
-	debugf("[server] Passing call through to %s %v", path, c.Args)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.passthrough(ctx, path)
+}
 
-	cmd := exec.Command(path, c.Args...)
+// PassthroughWithTimeout invokes another local binary and returns the results, if execution doesn't finish
+// before the timeout the command is killed and an error is returned
+func (c *Call) PassthroughWithTimeout(path string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	c.passthrough(ctx, path)
+}
+
+func (c *Call) passthrough(ctx context.Context, path string) {
+	start := time.Now()
+	ticker := time.NewTicker(time.Second)
+
+	defer func() {
+		c.debugf("Passthrough to %s %v finished in %v", path, c.Args, time.Now().Sub(start))
+		ticker.Stop()
+	}()
+
+	c.debugf("Passing call through to %s %v", path, c.Args)
+	cmd := exec.CommandContext(ctx, path, c.Args[1:]...)
 	cmd.Env = c.Env
 	cmd.Stdout = c.Stdout
 	cmd.Stderr = c.Stderr
 	cmd.Stdin = c.Stdin
 	cmd.Dir = c.Dir
 
-	var waitStatus syscall.WaitStatus
-	if err := cmd.Run(); err != nil {
-		debugf("[server] Invoked command exited with error: %v", err)
-		if exitError, ok := err.(*exec.ExitError); ok {
-			waitStatus = exitError.Sys().(syscall.WaitStatus)
-			c.Exit(waitStatus.ExitStatus())
-		} else {
-			panic(err)
-		}
-	} else {
-		debugf("[server] Invoked command exited with 0")
-		c.Exit(0)
+	if err := cmd.Start(); err != nil {
+		c.Fatal(err)
+		return
 	}
+
+	// Print progress on execution to make debugging easier. We need to check the context because
+	// stopping the ticker won't actually close the
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				c.debugf("Context is done")
+				return
+			case <-ticker.C:
+				c.debugf("Passthrough %s %v has been running for %v", path, c.Args, time.Now().Sub(start))
+			}
+		}
+	}()
+
+	c.debugf("Waiting for command to finish")
+	if err := cmd.Wait(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			c.debugf("Command exceeded deadline")
+			c.Fatal(errors.New("Command exceeded deadline and was killed"))
+			return
+		}
+		c.Fatal(err)
+		return
+	}
+
+	c.Exit(0)
+}
+
+// Returns true if the call is done, doesn't block and is thread-safe
+func (c *Call) IsDone() bool {
+	return atomic.LoadUint32(&c.done) == 1
+}
+
+func (c *Call) debugf(pattern string, args ...interface{}) {
+	debugf(fmt.Sprintf("[call %d] %s", c.PID, pattern), args...)
 }
 
 var (

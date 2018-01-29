@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/lox/bintest/proxy"
 )
@@ -77,10 +78,10 @@ func (m *Mock) invoke(call *proxy.Call) {
 	m.Lock()
 	defer m.Unlock()
 
-	debugf("Handling invocation for %s %s", m.Name, call.Args)
+	debugf("Handling invocation for %s %v", m.Name, call.Args[1:])
 
 	var invocation = Invocation{
-		Args: call.Args,
+		Args: call.Args[1:],
 		Env:  call.Env,
 		Dir:  call.Dir,
 	}
@@ -94,7 +95,7 @@ func (m *Mock) invoke(call *proxy.Call) {
 		}
 	}
 
-	result := m.expected.ForArguments(call.Args...)
+	result := m.expected.ForArguments(call.Args[1:]...)
 	expected, err := result.Match()
 	if err != nil {
 		debugf("No match found for expectation: %v", err)
@@ -118,9 +119,9 @@ func (m *Mock) invoke(call *proxy.Call) {
 	invocation.Expectation = expected
 
 	if m.passthroughPath != "" {
-		call.Passthrough(m.passthroughPath)
+		call.PassthroughWithTimeout(m.passthroughPath, time.Second*10)
 	} else if expected.passthroughPath != "" {
-		call.Passthrough(expected.passthroughPath)
+		call.PassthroughWithTimeout(expected.passthroughPath, time.Second*10)
 	} else if expected.callFunc != nil {
 		expected.callFunc(call)
 	} else {
