@@ -39,6 +39,7 @@ func main() {
 func compile(dest string, src string, vars []string) error {
 	args := []string{
 		"build",
+		"-i",
 		"-o", dest,
 	}
 
@@ -68,17 +69,23 @@ func compile(dest string, src string, vars []string) error {
 }
 
 func compileClient(dest string, vars []string) error {
-	dir, err := ioutil.TempDir("", "binproxy")
-	if err != nil {
-		return fmt.Errorf("Error creating temp dir: %v", err)
-	}
-
-	defer os.RemoveAll(dir)
-
-	err = ioutil.WriteFile(filepath.Join(dir, "client.go"), []byte(clientSrc), 0500)
+	wd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	return compile(dest, filepath.Join(dir, "client.go"), vars)
+	dir := fmt.Sprintf(`compiled-%d`, time.Now().UnixNano())
+	if err = os.Mkdir(filepath.Join(wd, dir), 0700); err != nil {
+		return err
+	}
+
+	defer os.RemoveAll(dir)
+
+	f := filepath.Join(dir, `main.go`)
+	err = ioutil.WriteFile(f, []byte(clientSrc), 0500)
+	if err != nil {
+		return err
+	}
+
+	return compile(dest, f, vars)
 }
