@@ -223,7 +223,7 @@ func TestMockWithCallFunc(t *testing.T) {
 	defer m.Close()
 
 	m.Expect("hello", "world").AndCallFunc(func(c *proxy.Call) {
-		if !reflect.DeepEqual(c.Args, []string{"hello", "world"}) {
+		if !reflect.DeepEqual(c.Args[1:], []string{"hello", "world"}) {
 			t.Errorf("Unexpected args: %v", c.Args)
 		}
 		fmt.Fprintf(c.Stdout, "hello world\n")
