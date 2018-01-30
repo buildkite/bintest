@@ -46,6 +46,14 @@ func New(URL string) *Client {
 	}
 }
 
+func NewFromEnv() *Client {
+	server := os.Getenv(proxy.ServerEnvVar)
+	if server == `` {
+		panic(fmt.Sprintf("No %s environment var set", proxy.ServerEnvVar))
+	}
+	return New(server)
+}
+
 // Run the client, panics on error and returns an exit code on success
 func (c *Client) Run() int {
 	c.debugf("Running %s", strings.Join(c.Args, " "))

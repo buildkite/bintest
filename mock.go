@@ -74,6 +74,26 @@ func NewMock(path string) (*Mock, error) {
 	return m, nil
 }
 
+func NewMockFromTestMain(path string) (*Mock, error) {
+	m := &Mock{}
+
+	proxy, err := proxy.LinkTestBinaryAsProxy(path)
+	if err != nil {
+		return nil, err
+	}
+
+	m.Name = filepath.Base(proxy.Path)
+	m.Path = proxy.Path
+	m.proxy = proxy
+
+	go func() {
+		for call := range m.proxy.Ch {
+			m.invoke(call)
+		}
+	}()
+	return m, nil
+}
+
 func (m *Mock) invoke(call *proxy.Call) {
 	m.Lock()
 	defer m.Unlock()
