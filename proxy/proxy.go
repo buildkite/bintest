@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+const (
+	ServerEnvVar = `BINTEST_PROXY_SERVER`
+)
+
 // Proxy provides a way to programatically respond to invocations of a compiled
 // binary that is created
 type Proxy struct {
@@ -25,6 +29,9 @@ type Proxy struct {
 
 	// Path is the full path to the compiled binproxy file
 	Path string
+
+	// The server that the proxy uses to communicate with the binary
+	Server *Server
 
 	// A count of how many calls have been made
 	CallCount int64
@@ -51,7 +58,7 @@ func Compile(path string) (*Proxy, error) {
 		path += ".exe"
 	}
 
-	server, err := startServer()
+	server, err := StartServer()
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +66,7 @@ func Compile(path string) (*Proxy, error) {
 	p := &Proxy{
 		Path:    path,
 		Ch:      make(chan *Call),
+		Server:  server,
 		tempDir: tempDir,
 	}
 
@@ -67,6 +75,71 @@ func Compile(path string) (*Proxy, error) {
 	return p, compileClient(path, []string{
 		"main.server=" + server.URL,
 	})
+}
+
+// LinkTestBinaryAsProxy uses the current binary as a Proxy rather than compiling one directly
+// This speeds things up considerably, but requires some code to be injected in TestMain
+func LinkTestBinaryAsProxy(path string) (*Proxy, error) {
+	var tempDir string
+
+	// Delete the target if it exists to be compatible with Compile
+	if _, err := os.Lstat(path); err == nil {
+		debugf("Deleting %s", path)
+		if err = os.Remove(path); err != nil {
+			return nil, err
+		}
+	}
+
+	if !filepath.IsAbs(path) {
+		var err error
+		tempDir, err = ioutil.TempDir("", "binproxy")
+		if err != nil {
+			return nil, fmt.Errorf("Error creating temp dir: %v", err)
+		}
+		path = filepath.Join(tempDir, path)
+	}
+
+	debugf("[linker] Linking %s to %s", os.Args[0], path)
+	if err := os.Symlink(os.Args[0], path); err != nil {
+		return nil, err
+	}
+
+	server, err := StartServer()
+	if err != nil {
+		return nil, err
+	}
+
+	p := &Proxy{
+		Path:    path,
+		Ch:      make(chan *Call),
+		Server:  server,
+		tempDir: tempDir,
+	}
+
+	server.registerProxy(p)
+
+	return p, nil
+}
+
+// Environ returns environment variables required to invoke the proxy
+func (p *Proxy) Environ() []string {
+	env := []string{
+		ServerEnvVar + `=` + p.Server.URL,
+	}
+
+	// Windows requires certain env variables to be present for subprocesses 🤷🏼‍♂️
+	if runtime.GOOS == "windows" {
+		env = append(env,
+			"SystemRoot="+os.Getenv("SystemRoot"),
+			"WINDIR="+os.Getenv("WINDIR"),
+			"COMSPEC="+os.Getenv("COMSPEC"),
+			"PATHEXT="+os.Getenv("PATHEXT"),
+			"TMP="+os.Getenv("TMP"),
+			"TEMP="+os.Getenv("TEMP"),
+		)
+	}
+
+	return env
 }
 
 func (p *Proxy) newCall(pid int, args []string, env []string, dir string) *Call {
@@ -95,9 +168,7 @@ func (p *Proxy) Close() (err error) {
 		}
 	}()
 	defer func() {
-		serverLock.Lock()
-		defer serverLock.Unlock()
-		serverInstance.deregisterProxy(p)
+		p.Server.deregisterProxy(p)
 	}()
 	return err
 }

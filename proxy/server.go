@@ -17,11 +17,12 @@ import (
 // have proxy calls within those sessions.
 
 var (
-	serverInstance *server
+	serverInstance *Server
 	serverLock     sync.Mutex
 )
 
-func startServer() (*server, error) {
+// StartServer starts an instance of a proxy server
+func StartServer() (*Server, error) {
 	serverLock.Lock()
 	defer serverLock.Unlock()
 
@@ -31,7 +32,7 @@ func startServer() (*server, error) {
 			return nil, err
 		}
 
-		s := &server{
+		s := &Server{
 			Listener: l,
 			URL:      "http://" + l.Addr().String(),
 		}
@@ -61,7 +62,7 @@ func StopServer() error {
 	return nil
 }
 
-type server struct {
+type Server struct {
 	net.Listener
 	URL string
 
@@ -69,12 +70,12 @@ type server struct {
 	callHandlers sync.Map
 }
 
-func (s *server) registerProxy(p *Proxy) {
+func (s *Server) registerProxy(p *Proxy) {
 	debugf("[server] Registering proxy %s", p.Path)
 	s.proxies.Store(p.Path, p)
 }
 
-func (s *server) deregisterProxy(p *Proxy) {
+func (s *Server) deregisterProxy(p *Proxy) {
 	debugf("[server] Deregistering proxy %s", p.Path)
 	s.proxies.Delete(p.Path)
 }
@@ -83,7 +84,7 @@ var (
 	callRouteRegex = regexp.MustCompile(`^/calls/(\d+)/(stdout|stderr|stdin|exitcode)$`)
 )
 
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/debug" {
 		body, _ := ioutil.ReadAll(r.Body)
 		_ = r.Body.Close()
@@ -134,7 +135,7 @@ type NewCallRequest struct {
 	HasStdin bool
 }
 
-func (s *server) handleNewCall(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleNewCall(w http.ResponseWriter, r *http.Request) {
 	var req NewCallRequest
 
 	// parse the posted args end env
