@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/buildkite/bintest"
+	"github.com/fortytw2/leaktest"
 )
 
 func proxyTearDown(t *testing.T) func() {
@@ -455,9 +455,10 @@ func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 	}
 	defer proxy.Close()
 
+	b := &bytes.Buffer{}
 	cmd := exec.Command(proxy.Path, "100")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = b
+	cmd.Stderr = b
 
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -468,8 +469,6 @@ func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 
 	if err = cmd.Wait(); err == nil {
 		t.Fatalf("Expected an error!")
-	} else if err.Error() != `Command exceeded deadline and was killed` {
-		t.Fatalf("Unexpected error: %v", err)
 	}
 }
 
