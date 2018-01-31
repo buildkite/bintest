@@ -1,4 +1,4 @@
-package client
+package bintest
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-
-	"github.com/lox/bintest/proxy"
 )
 
 type Client struct {
@@ -28,7 +26,7 @@ type Client struct {
 	Stderr io.WriteCloser
 }
 
-func New(URL string) *Client {
+func NewClient(URL string) *Client {
 	wd, err := os.Getwd()
 	if err != nil {
 		panic(err)
@@ -46,19 +44,19 @@ func New(URL string) *Client {
 	}
 }
 
-func NewFromEnv() *Client {
-	server := os.Getenv(proxy.ServerEnvVar)
+func NewClientFromEnv() *Client {
+	server := os.Getenv(ServerEnvVar)
 	if server == `` {
-		panic(fmt.Sprintf("No %s environment var set", proxy.ServerEnvVar))
+		panic(fmt.Sprintf("No %s environment var set", ServerEnvVar))
 	}
-	return New(server)
+	return NewClient(server)
 }
 
 // Run the client, panics on error and returns an exit code on success
 func (c *Client) Run() int {
 	c.debugf("Running %s", strings.Join(c.Args, " "))
 
-	var req = proxy.NewCallRequest{
+	var req = callRequest{
 		PID:      c.PID,
 		Args:     c.Args,
 		Env:      c.Env,

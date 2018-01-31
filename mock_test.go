@@ -12,7 +12,6 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/lox/bintest"
-	"github.com/lox/bintest/proxy"
 )
 
 type testingT struct {
@@ -31,7 +30,7 @@ func (t *testingT) Errorf(format string, args ...interface{}) {
 func tearDown(t *testing.T) func() {
 	leakTest := leaktest.Check(t)
 	return func() {
-		if err := proxy.StopServer(); err != nil {
+		if err := bintest.StopServer(); err != nil {
 			t.Fatal(err)
 		}
 		leakTest()
@@ -224,7 +223,7 @@ func TestMockWithCallFunc(t *testing.T) {
 	}
 	defer m.Close()
 
-	m.Expect("hello", "world").AndCallFunc(func(c *proxy.Call) {
+	m.Expect("hello", "world").AndCallFunc(func(c *bintest.Call) {
 		if !reflect.DeepEqual(c.Args[1:], []string{"hello", "world"}) {
 			t.Errorf("Unexpected args: %v", c.Args)
 		}

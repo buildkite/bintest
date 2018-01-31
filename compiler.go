@@ -1,6 +1,7 @@
-package proxy
+package bintest
 
 import (
+	"crypto/md5"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -15,7 +16,7 @@ const (
 	clientSrc = `package main
 
 import (
-	"github.com/lox/bintest/proxy/client"
+	"github.com/lox/bintest"
 	"os"
 )
 
@@ -25,7 +26,7 @@ var (
 )
 
 func main() {
-	c := client.New(server)
+	c := bintest.NewClient(server)
 
 	if debug == "true" {
 		c.Debug = true
@@ -71,9 +72,9 @@ func compileClient(dest string, vars []string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
-	}
+	}A
 
-	dir := fmt.Sprintf(`compiled-%d`, time.Now().UnixNano())
+	dir := fmt.Sprintf(`bintest_stub_%x`, md5.Sum([]byte(dest)))
 	if err = os.Mkdir(filepath.Join(wd, dir), 0700); err != nil {
 		return err
 	}

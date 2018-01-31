@@ -1,4 +1,4 @@
-package proxy
+package bintest
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,8 +20,7 @@ const (
 	ServerEnvVar = `BINTEST_PROXY_SERVER`
 )
 
-// Proxy provides a way to programatically respond to invocations of a compiled
-// binary that is created
+// Proxy provides a way to programatically respond to invocations of a binary
 type Proxy struct {
 	// Ch is the channel of calls
 	Ch chan *Call
@@ -42,7 +40,7 @@ type Proxy struct {
 
 // Compile generates a mock binary at the provided path. If just a filename is provided a temp
 // directory is created.
-func Compile(path string) (*Proxy, error) {
+func CompileProxy(path string) (*Proxy, error) {
 	var tempDir string
 
 	if !filepath.IsAbs(path) {
@@ -314,14 +312,4 @@ func (c *Call) IsDone() bool {
 
 func (c *Call) debugf(pattern string, args ...interface{}) {
 	debugf(fmt.Sprintf("[call %d] %s", c.PID, pattern), args...)
-}
-
-var (
-	Debug bool
-)
-
-func debugf(pattern string, args ...interface{}) {
-	if Debug {
-		log.Printf(pattern, args...)
-	}
 }

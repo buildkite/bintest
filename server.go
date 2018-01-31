@@ -1,4 +1,4 @@
-package proxy
+package bintest
 
 import (
 	"encoding/json"
@@ -127,7 +127,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	debugf("[server] END %s (%v)", r.URL.Path, time.Now().Sub(start))
 }
 
-type NewCallRequest struct {
+type callRequest struct {
 	PID      int
 	Args     []string
 	Env      []string
@@ -136,7 +136,7 @@ type NewCallRequest struct {
 }
 
 func (s *Server) handleNewCall(w http.ResponseWriter, r *http.Request) {
-	var req NewCallRequest
+	var req callRequest
 
 	// parse the posted args end env
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

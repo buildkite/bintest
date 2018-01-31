@@ -5,14 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/lox/bintest/proxy"
 )
 
 const (
@@ -48,7 +45,7 @@ type Mock struct {
 	ignoreUnexpected bool
 
 	// The related proxy
-	proxy *proxy.Proxy
+	proxy *Proxy
 
 	// A command to passthrough execution to
 	passthroughPath string
@@ -58,7 +55,7 @@ type Mock struct {
 func NewMock(path string) (*Mock, error) {
 	m := &Mock{}
 
-	proxy, err := proxy.Compile(path)
+	proxy, err := CompileProxy(path)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +75,7 @@ func NewMock(path string) (*Mock, error) {
 func NewMockFromTestMain(path string) (*Mock, error) {
 	m := &Mock{}
 
-	proxy, err := proxy.LinkTestBinaryAsProxy(path)
+	proxy, err := LinkTestBinaryAsProxy(path)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +92,7 @@ func NewMockFromTestMain(path string) (*Mock, error) {
 	return m, nil
 }
 
-func (m *Mock) invoke(call *proxy.Call) {
+func (m *Mock) invoke(call *Call) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -284,14 +281,4 @@ type Invocation struct {
 	Env         []string
 	Dir         string
 	Expectation *Expectation
-}
-
-var (
-	Debug bool
-)
-
-func debugf(pattern string, args ...interface{}) {
-	if Debug {
-		log.Printf("[mock] "+pattern, args...)
-	}
 }

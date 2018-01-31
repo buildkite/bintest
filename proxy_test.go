@@ -1,11 +1,10 @@
-package proxy_test
+package bintest_test
 
 import (
 	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,44 +17,13 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/lox/bintest/proxy"
+	"github.com/lox/bintest"
 )
 
-func ExampleCompile() {
-	// create a proxy for the git command that echos some debug
-	p, err := proxy.Compile("git")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer p.Close()
-
-	// call the proxy like a normal binary in the background
-	cmd := exec.Command(p.Path, "rev-parse")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// windows needs all the environment variables
-	cmd.Env = append(os.Environ(), `MY_MESSAGE=Llama party! 🎉`)
-
-	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
-	}
-
-	// handle invocations of the proxy binary
-	call := <-p.Ch
-	fmt.Fprintln(call.Stdout, call.GetEnv(`MY_MESSAGE`))
-	call.Exit(0)
-
-	// wait for the command to finish
-	cmd.Wait()
-
-	// Output: Llama party! 🎉
-}
-
-func tearDown(t *testing.T) func() {
+func proxyTearDown(t *testing.T) func() {
 	leakTest := leaktest.Check(t)
 	return func() {
-		if err := proxy.StopServer(); err != nil {
+		if err := bintest.StopServer(); err != nil {
 			t.Fatal(err)
 		}
 		time.Sleep(time.Millisecond * 10)
@@ -64,9 +32,9 @@ func tearDown(t *testing.T) func() {
 }
 
 func TestProxyWithStdin(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,9 +67,9 @@ func TestProxyWithStdin(t *testing.T) {
 }
 
 func TestProxyWithStdout(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,9 +99,9 @@ func TestProxyWithStdout(t *testing.T) {
 }
 
 func TestProxyWithStderr(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,9 +127,9 @@ func TestProxyWithStderr(t *testing.T) {
 }
 
 func TestProxyWithStdoutAndStderr(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,9 +170,9 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 }
 
 func TestProxyWithNoOutput(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +190,7 @@ func TestProxyWithNoOutput(t *testing.T) {
 }
 
 func TestProxyWithLotsOfOutput(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
 	var expected string
 	for i := 0; i < 10; i++ {
@@ -231,7 +199,7 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 
 	actual := &bytes.Buffer{}
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,9 +229,9 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 }
 
 func TestProxyWithNonZeroExitCode(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,9 +260,9 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 }
 
 func TestProxyCloseRemovesFile(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +295,7 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 }
 
 func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
 	tempDir, err := ioutil.TempDir("", "proxy-wd-test")
 	if err != nil {
@@ -335,7 +303,7 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +327,7 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
 	echoCmd := `/bin/echo`
 	if runtime.GOOS == `windows` {
@@ -372,7 +340,7 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 		})
 	}
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +370,7 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithStdin(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
 	catCmd := `/bin/cat`
 	if runtime.GOOS == `windows` {
@@ -412,7 +380,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 		})
 	}
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +412,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
 	falseCmd := `/usr/bin/false`
 	if runtime.GOOS == `windows` {
@@ -454,7 +422,7 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 		})
 	}
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,13 +443,13 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithTimeout(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
 	if runtime.GOOS == `windows` {
 		t.Skipf("Not implemented for windows")
 	}
 
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +474,7 @@ func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 }
 
 func TestProxyCallingInParallel(t *testing.T) {
-	defer tearDown(t)()
+	defer proxyTearDown(t)()
 
 	var wg sync.WaitGroup
 
@@ -515,7 +483,7 @@ func TestProxyCallingInParallel(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 
-			proxy, err := proxy.LinkTestBinaryAsProxy(fmt.Sprintf("test%d", i))
+			proxy, err := bintest.LinkTestBinaryAsProxy(fmt.Sprintf("test%d", i))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -561,7 +529,7 @@ func normalizeNewlines(s string) string {
 
 func BenchmarkCreatingProxies(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		proxy, err := proxy.Compile("test")
+		proxy, err := bintest.CompileProxy("test")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -570,7 +538,7 @@ func BenchmarkCreatingProxies(b *testing.B) {
 }
 
 func BenchmarkCallingProxies(b *testing.B) {
-	proxy, err := proxy.Compile("test")
+	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		b.Fatal(err)
 	}

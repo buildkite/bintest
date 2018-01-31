@@ -5,16 +5,13 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
-	"testing"
 
 	"github.com/lox/bintest"
 )
 
-func ExampleLinkTestBinaryAsProxy() {
+func ExampleCompileProxy() {
 	// create a proxy for the git command that echos some debug
-	p, err := bintest.LinkTestBinaryAsProxy("git")
+	p, err := bintest.CompileProxy("git")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -26,9 +23,7 @@ func ExampleLinkTestBinaryAsProxy() {
 	cmd.Stderr = os.Stderr
 
 	// windows needs all the environment variables
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, p.Environ()...)
-	cmd.Env = append(cmd.Env, `MY_MESSAGE=Llama party! 🎉`)
+	cmd.Env = append(os.Environ(), `MY_MESSAGE=Llama party! 🎉`)
 
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
@@ -43,16 +38,4 @@ func ExampleLinkTestBinaryAsProxy() {
 	cmd.Wait()
 
 	// Output: Llama party! 🎉
-}
-
-func TestMain(m *testing.M) {
-	// flag.BoolVar(&proxy.Debug, "proxy.debug", false, "Whether to show proxy debug")
-	// flag.Parse()
-
-	if strings.TrimSuffix(filepath.Base(os.Args[0]), `.exe`) != `bintest.test` {
-		os.Exit(bintest.NewClientFromEnv().Run())
-	}
-
-	code := m.Run()
-	os.Exit(code)
 }

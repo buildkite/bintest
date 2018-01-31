@@ -1,4 +1,4 @@
-package client_test
+package bintest_test
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lox/bintest/proxy/client"
+	"github.com/lox/bintest"
 )
 
 func TestClient(t *testing.T) {
@@ -36,7 +36,7 @@ func TestClient(t *testing.T) {
 	stdout := &closingBuffer{}
 	stderr := &closingBuffer{}
 
-	c := client.Client{
+	c := bintest.Client{
 		Debug:  false,
 		URL:    ts.URL,
 		PID:    1234567,
