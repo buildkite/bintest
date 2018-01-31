@@ -72,7 +72,7 @@ func compileClient(dest string, vars []string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
-	}A
+	}
 
 	dir := fmt.Sprintf(`bintest_stub_%x`, md5.Sum([]byte(dest)))
 	if err = os.Mkdir(filepath.Join(wd, dir), 0700); err != nil {
