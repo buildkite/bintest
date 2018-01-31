@@ -3,7 +3,7 @@ package bintest_test
 import (
 	"testing"
 
-	"github.com/lox/bintest"
+	"github.com/buildkite/bintest"
 )
 
 func TestArgumentsThatDontMatch(t *testing.T) {

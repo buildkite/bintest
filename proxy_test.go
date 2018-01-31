@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/lox/bintest"
+	"github.com/buildkite/bintest"
 )
 
 func proxyTearDown(t *testing.T) func() {

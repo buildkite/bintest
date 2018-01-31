@@ -16,7 +16,7 @@ const (
 	clientSrc = `package main
 
 import (
-	"github.com/lox/bintest"
+	"github.com/buildkite/bintest"
 	"os"
 )
 

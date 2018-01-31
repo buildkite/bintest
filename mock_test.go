@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/lox/bintest"
+	"github.com/buildkite/bintest"
 )
 
 type testingT struct {

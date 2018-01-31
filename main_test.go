@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lox/bintest"
+	"github.com/buildkite/bintest"
 )
 
 func ExampleLinkTestBinaryAsProxy() {
