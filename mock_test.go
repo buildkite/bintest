@@ -154,9 +154,9 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 	defer m.Close()
 
 	m.PassthroughToLocalCommand()
-	m.Expect("hello", "world")
+	m.Expect("hello world")
 
-	out, err := exec.Command(m.Path, "hello", "world").CombinedOutput()
+	out, err := exec.Command(m.Path, "hello world").CombinedOutput()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,8 +165,10 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 		t.Errorf("Assertions should have passed")
 	}
 
-	if string(out) != "hello world\n" {
-		t.Fatalf("Unexpected output %q", out)
+	expected := "hello world\n"
+
+	if string(out) != expected {
+		t.Fatalf("Expected %q, got %q", expected, out)
 	}
 }
 
@@ -393,7 +395,7 @@ func TestMockExpectWithBefore(t *testing.T) {
 	m.Expect().AtLeastOnce().WithAnyArguments()
 
 	cmd := exec.Command(m.Path)
-	cmd.Env = []string{`MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`}
+	cmd.Env = append(os.Environ(), `MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 
@@ -423,7 +425,7 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 		}
 		defer m.Close()
 
-		m.Expect(fmt.Sprintf("%d", i)).Exactly(1).AndPassthroughToLocalCommand("/bin/sleep")
+		m.Expect(fmt.Sprintf("%d", i)).Exactly(1).AndPassthroughToLocalCommand("sleep")
 
 		wg.Add(1)
 		go func(path string, i int) {

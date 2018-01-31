@@ -76,7 +76,6 @@ func (c *Client) Run() int {
 	wg.Add(2)
 
 	if c.isStdinReadable() {
-		c.debugf("Stdin is readable")
 		go func() {
 			r, w := io.Pipe()
 			wg.Add(1)
@@ -154,6 +153,7 @@ func (c *Client) Run() int {
 
 func (c *Client) isStdinReadable() bool {
 	if c.Stdin == nil {
+		c.debugf("Nil stdin passed")
 		return false
 	}
 
@@ -162,6 +162,7 @@ func (c *Client) isStdinReadable() bool {
 	if stdinFile, ok := c.Stdin.(*os.File); ok {
 		stat, _ := stdinFile.Stat()
 		if (stat.Mode() & os.ModeCharDevice) != 0 {
+			c.debugf("Stdin is a terminal, nothing to read")
 			return false
 		}
 
@@ -169,11 +170,9 @@ func (c *Client) isStdinReadable() bool {
 			c.debugf("Stdin has %d bytes to read", stat.Size())
 			return true
 		}
-	} else {
-		return true
 	}
 
-	return false
+	return true
 }
 
 func (c *Client) debugf(pattern string, args ...interface{}) {

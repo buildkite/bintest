@@ -1,11 +1,13 @@
 package proxy_test
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lox/bintest/proxy"
@@ -30,8 +32,6 @@ func ExampleLinkTestBinaryAsProxy() {
 	cmd.Env = append(cmd.Env, p.Environ()...)
 	cmd.Env = append(cmd.Env, `MY_MESSAGE=Llama party! 🎉`)
 
-	log.Printf("%#v", cmd.Env)
-
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
@@ -48,7 +48,10 @@ func ExampleLinkTestBinaryAsProxy() {
 }
 
 func TestMain(m *testing.M) {
-	if filepath.Base(os.Args[0]) != `proxy.test` {
+	flag.BoolVar(&proxy.Debug, "proxy.debug", false, "Whether to show proxy debug")
+	flag.Parse()
+
+	if strings.TrimSuffix(filepath.Base(os.Args[0]), `.exe`) != `proxy.test` {
 		os.Exit(client.NewFromEnv().Run())
 	}
 

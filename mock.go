@@ -8,6 +8,7 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,7 +63,7 @@ func NewMock(path string) (*Mock, error) {
 		return nil, err
 	}
 
-	m.Name = filepath.Base(proxy.Path)
+	m.Name = strings.TrimSuffix(filepath.Base(proxy.Path), `.exe`)
 	m.Path = proxy.Path
 	m.proxy = proxy
 
@@ -162,6 +163,7 @@ func (m *Mock) invoke(call *proxy.Call) {
 func (m *Mock) PassthroughToLocalCommand() *Mock {
 	m.Lock()
 	defer m.Unlock()
+	debugf("[mock] Looking up %s in path", m.Name)
 	path, err := exec.LookPath(m.Name)
 	if err != nil {
 		panic(err)

@@ -37,7 +37,7 @@ func StartServer() (*Server, error) {
 			URL:      "http://" + l.Addr().String(),
 		}
 
-		debugf("[server] Starting server on %s", l.Addr().String())
+		debugf("[server] Starting server on %s", s.URL)
 		go func() {
 			_ = http.Serve(l, s)
 		}()
@@ -54,7 +54,7 @@ func StopServer() error {
 	defer serverLock.Unlock()
 
 	if serverInstance != nil {
-		debugf("[server] Stopping server on %s", serverInstance.Addr().String())
+		debugf("[server] Stopping server on %s", serverInstance.URL)
 		_ = serverInstance.Close()
 		serverInstance = nil
 	}

@@ -8,7 +8,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,7 +75,6 @@ func TestProxyWithStdin(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path)
-	cmd.Env = []string{}
 	cmd.Stdin = strings.NewReader("This is my stdin\n")
 	cmd.Stdout = outBuf
 	cmd.Stderr = os.Stderr
@@ -109,7 +110,6 @@ func TestProxyWithStdout(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
-	cmd.Env = []string{}
 	cmd.Stdout = outBuf
 	cmd.Stderr = os.Stderr
 
@@ -171,7 +171,6 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 	stderr := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
-	cmd.Env = []string{}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -362,6 +361,17 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 	defer tearDown(t)()
 
+	echoCmd := `/bin/echo`
+	if runtime.GOOS == `windows` {
+		// Question every life choice that has lead you to want to understand the below
+		// https://ss64.com/nt/syntax-esc.html
+		echoCmd = writeBatchFile(t, "echo.bat", []string{
+			`@ECHO OFF`,
+			`Set _string=%~1`,
+			`Echo %_string%`,
+		})
+	}
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
@@ -371,27 +381,36 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path, `hello world`)
-	cmd.Env = []string{}
 	cmd.Stdout = outBuf
+	cmd.Stderr = os.Stderr
 
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 
 	call := <-proxy.Ch
-	call.Passthrough(`/bin/echo`)
+	call.Passthrough(echoCmd)
 
 	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
 
-	if expected := "hello world\n"; outBuf.String() != expected {
-		t.Fatalf("Expected stdout to be %q, got %q", expected, outBuf.String())
+	out := normalizeNewlines(outBuf.String())
+	if expected := "hello world\n"; out != expected {
+		t.Fatalf("Expected stdout to be %q, got %q", expected, out)
 	}
 }
 
 func TestProxyWithPassthroughWithStdin(t *testing.T) {
 	defer tearDown(t)()
+
+	catCmd := `/bin/cat`
+	if runtime.GOOS == `windows` {
+		catCmd = writeBatchFile(t, "cat.bat", []string{
+			`@ECHO OFF`,
+			`FIND/V ""`,
+		})
+	}
 
 	proxy, err := proxy.Compile("test")
 	if err != nil {
@@ -399,11 +418,10 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 	}
 	defer proxy.Close()
 
-	inBuf := bytes.NewBufferString("hello world\n")
+	inBuf := bytes.NewBufferString(normalizeNewlines("hello world\n"))
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path)
-	cmd.Env = []string{}
 	cmd.Stdin = inBuf
 	cmd.Stdout = outBuf
 
@@ -412,19 +430,29 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 	}
 
 	call := <-proxy.Ch
-	call.Passthrough(`/bin/cat`)
+	call.Passthrough(catCmd)
 
 	if err = cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
 
-	if expected := "hello world\n"; outBuf.String() != expected {
-		t.Fatalf("Expected stdout to be %q, got %q", expected, outBuf.String())
+	out := normalizeNewlines(outBuf.String())
+
+	if expected := "hello world\n"; out != expected {
+		t.Fatalf("Expected stdout to be %q, got %q", expected, out)
 	}
 }
 
 func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 	defer tearDown(t)()
+
+	falseCmd := `/usr/bin/false`
+	if runtime.GOOS == `windows` {
+		falseCmd = writeBatchFile(t, "false.bat", []string{
+			`@ECHO OFF`,
+			`EXIT /B 1`,
+		})
+	}
 
 	proxy, err := proxy.Compile("test")
 	if err != nil {
@@ -433,14 +461,13 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 	defer proxy.Close()
 
 	cmd := exec.Command(proxy.Path)
-	cmd.Env = []string{}
 
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 
 	call := <-proxy.Ch
-	call.Passthrough(`/usr/bin/false`)
+	call.Passthrough(falseCmd)
 
 	if err = cmd.Wait(); err == nil {
 		t.Fatalf("Expected an error")
@@ -450,14 +477,19 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 	defer tearDown(t)()
 
+	if runtime.GOOS == `windows` {
+		t.Skipf("Not implemented for windows")
+	}
+
 	proxy, err := proxy.Compile("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
 
-	cmd := exec.Command(proxy.Path, "10000")
-	cmd.Env = []string{}
+	cmd := exec.Command(proxy.Path, "100")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -468,6 +500,8 @@ func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 
 	if err = cmd.Wait(); err == nil {
 		t.Fatalf("Expected an error!")
+	} else if err.Error() != `Command exceeded deadline and was killed` {
+		t.Fatalf("Unexpected error: %v", err)
 	}
 }
 
@@ -481,14 +515,14 @@ func TestProxyCallingInParallel(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 
-			proxy, err := proxy.Compile(fmt.Sprintf("test%d", i))
+			proxy, err := proxy.LinkTestBinaryAsProxy(fmt.Sprintf("test%d", i))
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer proxy.Close()
 
 			cmd := exec.Command(proxy.Path)
-			cmd.Env = []string{}
+			cmd.Env = proxy.Environ()
 
 			if err = cmd.Start(); err != nil {
 				t.Fatal(err)
@@ -504,6 +538,25 @@ func TestProxyCallingInParallel(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func writeBatchFile(t *testing.T, name string, lines []string) string {
+	tmpDir, err := ioutil.TempDir("", "batch-files-of-horror")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	batchfile := filepath.Join(tmpDir, name)
+	err = ioutil.WriteFile(batchfile, []byte(strings.Join(lines, "\r\n")), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return batchfile
+}
+
+func normalizeNewlines(s string) string {
+	return strings.Replace(s, "\r\n", "\n", -1)
 }
 
 func BenchmarkCreatingProxies(b *testing.B) {
