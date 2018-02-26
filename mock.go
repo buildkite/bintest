@@ -8,8 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/sasha-s/go-deadlock"
 )
 
 const (
@@ -24,7 +25,7 @@ type TestingT interface {
 
 // Mock provides a wrapper around a Proxy for testing
 type Mock struct {
-	sync.Mutex
+	deadlock.Mutex
 
 	// Name of the binary
 	Name string
