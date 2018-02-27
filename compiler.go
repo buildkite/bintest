@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -95,8 +94,6 @@ func compileClient(dest string, vars []string) error {
 	}
 
 	// if we can, use the compile cache
-	log.Printf("Checking if cached %v", vars)
-
 	if compileCacheInstance.IsCached(vars) {
 		return compileCacheInstance.Copy(dest, vars)
 	}
@@ -119,8 +116,6 @@ func compileClient(dest string, vars []string) error {
 			return err
 		}
 	}
-
-	log.Printf("Compiling %s for %v", dest, vars)
 
 	if err := compile(dest, f, vars); err != nil {
 		_ = os.RemoveAll(dir)
@@ -158,11 +153,9 @@ func (c *compileCache) IsCached(vars []string) bool {
 	}
 
 	if _, err := os.Stat(path); err == nil {
-		log.Printf("%s exists", path)
 		return true
 	}
 
-	log.Printf("%s doesn't exist", path)
 	return false
 }
 
@@ -171,8 +164,6 @@ func (c *compileCache) Copy(dest string, vars []string) error {
 	if err != nil {
 		return err
 	}
-
-	log.Printf("Copying from %s to %s", src, dest)
 	return copyFile(dest, src, 0777)
 }
 
@@ -181,8 +172,6 @@ func (c *compileCache) Cache(src string, vars []string) error {
 	if err != nil {
 		return err
 	}
-
-	log.Printf("Caching %s from %v (into %s)", src, vars, dest)
 	return copyFile(dest, src, 0666)
 }
 
@@ -198,10 +187,7 @@ func (c *compileCache) Key(vars []string) (string, error) {
 	// factor in client source as well
 	_, _ = io.WriteString(h, clientSrc)
 
-	k := fmt.Sprintf("%x", h.Sum(nil))
-	log.Printf("Hashed %v -> %s", vars, k)
-
-	return k, nil
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 func (c *compileCache) file(vars []string) (string, error) {
