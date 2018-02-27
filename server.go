@@ -2,6 +2,7 @@ package bintest
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -23,15 +24,25 @@ var (
 	serverLock     deadlock.Mutex
 )
 
+const (
+	defaultPort = 57567
+)
+
 // StartServer starts an instance of a proxy server
 func StartServer() (*Server, error) {
 	serverLock.Lock()
 	defer serverLock.Unlock()
 
 	if serverInstance == nil {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
+		// try a default port first so that we get better cached binary re-usage
+		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", defaultPort))
 		if err != nil {
-			return nil, err
+
+			// otherwise grab the first available
+			l, err = net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		s := &Server{
