@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"sync"
+
+	"github.com/kardianos/osext"
 )
 
 type Client struct {
@@ -29,6 +31,14 @@ func NewClient(URL string) *Client {
 	wd, err := os.Getwd()
 	if err != nil {
 		panic(err)
+	}
+
+	// replace what we are invoked with with the full path to the
+	// binary that was executed, otherwise we have trouble looking
+	// it up in the registry
+	filename, err := osext.Executable()
+	if err == nil {
+		os.Args[0] = filename
 	}
 
 	return &Client{
