@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -54,7 +53,7 @@ func NewClientFromEnv() *Client {
 
 // Run the client, panics on error and returns an exit code on success
 func (c *Client) Run() int {
-	c.debugf("Running %s", strings.Join(c.Args, " "))
+	c.debugf("Client invoked with %v, PID %d", c.Args, c.PID)
 
 	var req = callRequest{
 		PID:      c.PID,
