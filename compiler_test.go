@@ -15,7 +15,6 @@ func ExampleCompileProxy() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer p.Close()
 
 	// call the proxy like a normal binary in the background
 	cmd := exec.Command(p.Path, "rev-parse")
@@ -26,6 +25,7 @@ func ExampleCompileProxy() {
 	cmd.Env = append(os.Environ(), `MY_MESSAGE=Llama party! 🎉`)
 
 	if err := cmd.Start(); err != nil {
+		_ = p.Close()
 		log.Fatal(err)
 	}
 
@@ -35,7 +35,11 @@ func ExampleCompileProxy() {
 	call.Exit(0)
 
 	// wait for the command to finish
-	cmd.Wait()
+	_ = cmd.Wait()
+
+	if err := p.Close(); err != nil {
+		log.Fatal(err)
+	}
 
 	// Output: Llama party! 🎉
 }

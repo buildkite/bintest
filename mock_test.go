@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/buildkite/bintest"
+	"github.com/fortytw2/leaktest"
 )
 
 type testingT struct {
@@ -44,7 +44,11 @@ func TestCallingMockWithStdErrExpected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect("blargh").AndWriteToStderr("llamas").AndExitWith(0)
 
@@ -71,7 +75,11 @@ func TestCallingMockWithStdOutExpected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect("blargh").AndWriteToStdout("llamas").AndExitWith(0)
 
@@ -99,7 +107,11 @@ func TestCallingMockWithNoExpectationsSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	_, err = exec.Command(m.Path, "blargh").CombinedOutput()
 	if err == nil {
@@ -120,7 +132,11 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect("blargh").
 		AndWriteToStdout("llamas rock").
@@ -150,7 +166,11 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.PassthroughToLocalCommand()
 	m.Expect("hello world")
@@ -192,7 +212,11 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer m.Close()
+			defer func() {
+				if err := m.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
 
 			m.Expect("test").Min(tc.min).Max(tc.max)
 			var failures int
@@ -221,7 +245,11 @@ func TestMockWithCallFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect("hello", "world").AndCallFunc(func(c *bintest.Call) {
 		if !reflect.DeepEqual(c.Args[1:], []string{"hello", "world"}) {
@@ -253,7 +281,11 @@ func TestMockRequiresExpectations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	err = exec.Command(m.Path, "first", "call").Run()
 	if err == nil {
@@ -272,7 +304,11 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.IgnoreUnexpectedInvocations()
 	m.Expect("first", "call").Once()
@@ -298,7 +334,11 @@ func TestMockOptionally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect("first", "call").Optionally()
 	m.Expect("third", "call").Once()
@@ -316,7 +356,11 @@ func TestMockMultipleExpects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect("first", "call")
 	m.Expect("first", "call")
@@ -338,7 +382,11 @@ func TestMockExpectWithNoArguments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect().AtLeastOnce()
 
@@ -357,7 +405,11 @@ func TestMockExpectWithMatcherFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.Expect().AtLeastOnce().WithMatcherFunc(func(arg ...string) bintest.ArgumentsMatchResult {
 		return bintest.ArgumentsMatchResult{
@@ -382,7 +434,11 @@ func TestMockExpectWithBefore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	m.PassthroughToLocalCommand().Before(func(i bintest.Invocation) error {
 		if err := bintest.ExpectEnv(t, i.Env, `MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`); err != nil {
@@ -422,7 +478,11 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer m.Close()
+		defer func() {
+			if err := m.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
 
 		m.Expect(fmt.Sprintf("%d", i)).Exactly(1).AndPassthroughToLocalCommand("sleep")
 

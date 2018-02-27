@@ -18,7 +18,6 @@ func ExampleLinkTestBinaryAsProxy() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer p.Close()
 
 	// call the proxy like a normal binary in the background
 	cmd := exec.Command(p.Path, "rev-parse")
@@ -40,7 +39,14 @@ func ExampleLinkTestBinaryAsProxy() {
 	call.Exit(0)
 
 	// wait for the command to finish
-	cmd.Wait()
+	if err := cmd.Wait(); err != nil {
+		log.Fatal(err)
+	}
+
+	// cleanup the proxy
+	if err := p.Close(); err != nil {
+		log.Fatal(err)
+	}
 
 	// Output: Llama party! 🎉
 }

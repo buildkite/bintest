@@ -79,13 +79,17 @@ func compileClient(dest string, vars []string) error {
 		return err
 	}
 
-	defer os.RemoveAll(dir)
-
 	f := filepath.Join(dir, `main.go`)
 	err = ioutil.WriteFile(f, []byte(clientSrc), 0500)
 	if err != nil {
+		_ = os.RemoveAll(dir)
 		return err
 	}
 
-	return compile(dest, f, vars)
+	if err := compile(dest, f, vars); err != nil {
+		_ = os.RemoveAll(dir)
+		return err
+	}
+
+	return os.RemoveAll(dir)
 }
