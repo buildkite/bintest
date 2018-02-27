@@ -38,7 +38,11 @@ func TestProxyWithStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	outBuf := &bytes.Buffer{}
 
@@ -53,7 +57,11 @@ func TestProxyWithStdin(t *testing.T) {
 
 	call := <-proxy.Ch
 	fmt.Fprintln(call.Stdout, "Copied to stdout")
-	io.Copy(call.Stdout, call.Stdin)
+
+	_, err = io.Copy(call.Stdout, call.Stdin)
+	if err != nil {
+		t.Fatal(err)
+	}
 	call.Exit(0)
 
 	// wait for the command to finish
@@ -73,7 +81,11 @@ func TestProxyWithStdout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	outBuf := &bytes.Buffer{}
 
@@ -105,13 +117,20 @@ func TestProxyWithStderr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	errBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Stderr = errBuf
-	cmd.Start()
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	fmt.Fprintln(call.Stderr, "Yup!")
@@ -133,7 +152,11 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -178,7 +201,9 @@ func TestProxyWithNoOutput(t *testing.T) {
 	}
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
-	cmd.Start()
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	call.Exit(0)
@@ -203,11 +228,18 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Stdout = actual
-	cmd.Start()
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	n, err := io.Copy(call.Stdout, strings.NewReader(expected))
@@ -235,12 +267,19 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Start()
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	call.Exit(24)
@@ -274,7 +313,10 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
-	cmd.Start()
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	call.Exit(0)
@@ -301,17 +343,26 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	cmd := exec.Command(proxy.Path, "test", "arguments")
 	cmd.Dir = tempDir
-	cmd.Start()
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	call := <-proxy.Ch
 	dir := strings.TrimPrefix(call.Dir, "/private")
@@ -344,7 +395,11 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	outBuf := &bytes.Buffer{}
 
@@ -384,7 +439,11 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	inBuf := bytes.NewBufferString(normalizeNewlines("hello world\n"))
 	outBuf := &bytes.Buffer{}
@@ -426,7 +485,11 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	cmd := exec.Command(proxy.Path)
 
@@ -453,7 +516,11 @@ func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	b := &bytes.Buffer{}
 	cmd := exec.Command(proxy.Path, "100")
@@ -486,7 +553,11 @@ func TestProxyCallingInParallel(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer proxy.Close()
+			defer func() {
+				if err := proxy.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
 
 			cmd := exec.Command(proxy.Path)
 			cmd.Env = proxy.Environ()
@@ -532,7 +603,11 @@ func BenchmarkCreatingProxies(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		defer proxy.Close()
+		defer func() {
+			if err := proxy.Close(); err != nil {
+				b.Error(err)
+			}
+		}()
 	}
 }
 
@@ -541,7 +616,11 @@ func BenchmarkCallingProxies(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			b.Error(err)
+		}
+	}()
 
 	var expected string
 	for i := 0; i < 1000; i++ {
@@ -559,7 +638,7 @@ func BenchmarkCallingProxies(b *testing.B) {
 		b.StartTimer()
 
 		call := <-proxy.Ch
-		io.Copy(call.Stdout, strings.NewReader(expected))
+		_, _ = io.Copy(call.Stdout, strings.NewReader(expected))
 		call.Exit(0)
 
 		b.StopTimer()

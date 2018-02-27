@@ -232,16 +232,18 @@ func copyPipeWithFlush(res http.ResponseWriter, pipeReader *io.PipeReader) {
 	for {
 		n, err := pipeReader.Read(buffer)
 		if err != nil {
-			pipeReader.Close()
+			_ = pipeReader.Close()
 			break
 		}
 
 		data := buffer[0:n]
-		res.Write(data)
+		_, _ = res.Write(data)
+
 		if f, ok := res.(http.Flusher); ok {
 			f.Flush()
 		}
-		//reset buffer
+
+		// reset buffer
 		for i := 0; i < n; i++ {
 			buffer[i] = 0
 		}
