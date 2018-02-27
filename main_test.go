@@ -59,6 +59,12 @@ func TestMain(m *testing.M) {
 		os.Exit(bintest.NewClientFromEnv().Run())
 	}
 
+	_, err := bintest.StartServer()
+	if err != nil {
+		fmt.Printf("Failed to start proxy server: %v", err)
+		os.Exit(1)
+	}
+
 	code := m.Run()
 	os.Exit(code)
 }

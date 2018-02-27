@@ -23,10 +23,6 @@ import (
 func proxyTearDown(t *testing.T) func() {
 	leakTest := leaktest.Check(t)
 	return func() {
-		if err := bintest.StopServer(); err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(time.Millisecond * 10)
 		leakTest()
 	}
 }
