@@ -500,3 +500,35 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestCallingMockWithRelativePath(t *testing.T) {
+	defer tearDown(t)()
+
+	bintest.Debug = true
+
+	m, err := bintest.NewMock("testmock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	m.Expect("blargh").Exactly(1)
+
+	cmd := exec.Command("./testmock", "blargh")
+	cmd.Dir = filepath.Dir(m.Path)
+
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Errorf("Expected no failures: %v", err)
+	}
+
+	mt := &testingT{}
+
+	if m.Check(mt) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}

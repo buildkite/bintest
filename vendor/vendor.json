@@ -9,12 +9,6 @@
 			"revisionTime": "2017-07-15T21:17:39Z"
 		},
 		{
-			"checksumSHA1": "gEjGS03N1eysvpQ+FCHTxPcbxXc=",
-			"path": "github.com/kardianos/osext",
-			"revision": "ae77be60afb1dcacde03767a8c37337fad28ac14",
-			"revisionTime": "2017-05-10T13:15:34Z"
-		},
-		{
 			"checksumSHA1": "CGMHn+iisBl9NBL4fUzWwhZ/vBk=",
 			"path": "github.com/petermattis/goid",
 			"revision": "b0b1615b78e5ee59739545bb38426383b2cda4c9",

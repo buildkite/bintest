@@ -549,6 +549,7 @@ func TestProxyCallingInParallel(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			defer func() {
 				if err := proxy.Close(); err != nil {
 					t.Error(err)
