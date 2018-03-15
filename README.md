@@ -25,7 +25,24 @@ agent.
   Expect("meta-data", "set", "buildkite:git:branch", mock.MatchAny()).
   AndExitWith(0)
 
+// ... Run your code that shells out to buildkite-agent metdata
+
 agent.CheckAndClose(t)
+```
+
+Sometimes you want to actually execute the command you are mocking out, but make some assertions about how it was called:
+
+```go
+agent, err := bintest.NewMock("buildkite-agent")
+if err != nil {
+  t.Fatal(err)
+}
+
+agent.
+  Expect().
+  AtLeastOnce().
+  WithAnyArguments()
+  AndPassthroughToLocalCommand("buildkite-agent")
 ```
 
 ## Proxies
