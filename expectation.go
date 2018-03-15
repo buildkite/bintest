@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/sasha-s/go-deadlock"
@@ -119,10 +121,21 @@ func (e *Expectation) AndWriteToStderr(s string) *Expectation {
 	return e
 }
 
-// AndPassthroughToLocalCommand causes the invoker to defer to a local command
+// AndPassthroughToLocalCommand causes the invoker to defer to a local command.
+// If the path isn't absolute, it's looked up in the path
 func (e *Expectation) AndPassthroughToLocalCommand(path string) *Expectation {
 	e.Lock()
 	defer e.Unlock()
+
+	if filepath.IsAbs(path) {
+		var err error
+		debugf("[mock] Looking up %s in path", path)
+		path, err = exec.LookPath(path)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	e.passthroughPath = path
 	return e
 }
