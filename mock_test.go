@@ -169,8 +169,7 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 		}
 	}()
 
-	m.PassthroughToLocalCommand()
-	m.Expect("hello world")
+	m.Expect("hello world").AndPassthroughToLocalCommand("echo")
 
 	out, err := exec.Command(m.Path, "hello world").CombinedOutput()
 	if err != nil {
@@ -307,11 +306,12 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 		}
 	}()
 
-	m.IgnoreUnexpectedInvocations()
 	m.Expect("first", "call").Once()
 	m.Expect("third", "call").Once()
 	m.Expect("fifth", "call").Once()
 	m.Expect("seventh", "call").NotCalled()
+
+	m.Expect().WithAnyArguments().AtLeastOnce().AndExitWith(0)
 
 	_ = exec.Command(m.Path, "first", "call").Run()
 	_ = exec.Command(m.Path, "second", "call").Run()
@@ -437,14 +437,15 @@ func TestMockExpectWithBefore(t *testing.T) {
 		}
 	}()
 
-	m.PassthroughToLocalCommand().Before(func(i bintest.Invocation) error {
+	m.Before(func(i bintest.Invocation) error {
 		if err := bintest.ExpectEnv(t, i.Env, `MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`); err != nil {
 			return err
 		}
 		return nil
-	})
-
-	m.Expect().AtLeastOnce().WithAnyArguments()
+	}).
+		Expect().
+		AtLeastOnce().
+		WithAnyArguments()
 
 	cmd := exec.Command(m.Path)
 	cmd.Env = append(os.Environ(), `MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`)
@@ -504,8 +505,6 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 func TestCallingMockWithRelativePath(t *testing.T) {
 	defer tearDown(t)()
 
-	bintest.Debug = true
-
 	m, err := bintest.NewMock("testmock")
 	if err != nil {
 		t.Fatal(err)
@@ -524,6 +523,53 @@ func TestCallingMockWithRelativePath(t *testing.T) {
 	_, err = cmd.CombinedOutput()
 	if err != nil {
 		t.Errorf("Expected no failures: %v", err)
+	}
+
+	mt := &testingT{}
+
+	if m.Check(mt) == false {
+		t.Errorf("Assertions should have passed")
+	}
+}
+
+func TestCallingMocksWithOverlappingExpectations(t *testing.T) {
+	defer tearDown(t)()
+
+	m, err := bintest.NewMock("testmock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	m.Expect("llamas").
+		Once().
+		AndExitWith(0)
+
+	m.Expect().
+		WithAnyArguments().
+		Exactly(2).
+		AndPassthroughToLocalCommand("echo")
+
+	cmd1 := exec.Command(m.Path, "llamas")
+	_, err = cmd1.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd2 := exec.Command(m.Path, "alpacas")
+	_, err = cmd2.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd3 := exec.Command(m.Path, "horses")
+	_, err = cmd3.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	mt := &testingT{}

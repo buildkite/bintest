@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -41,9 +40,6 @@ type Mock struct {
 
 	// A list of middleware functions to call before invocation
 	before []func(i Invocation) error
-
-	// Whether to ignore unexpected calls
-	ignoreUnexpected bool
 
 	// The related proxy
 	proxy *Proxy
@@ -120,10 +116,7 @@ func (m *Mock) invoke(call *Call) {
 		debugf("No match found for expectation: %v", err)
 
 		m.invocations = append(m.invocations, invocation)
-		if m.ignoreUnexpected {
-			debugf("Exiting silently, ignoreUnexpected is set")
-			call.Exit(0)
-		} else if err == ErrNoExpectationsMatch {
+		if err == ErrNoExpectationsMatch {
 			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %s\033[0m\n", result.ClosestMatch().Explain())
 			call.Exit(1)
 		} else {
@@ -137,9 +130,7 @@ func (m *Mock) invoke(call *Call) {
 
 	invocation.Expectation = expected
 
-	if m.passthroughPath != "" {
-		call.PassthroughWithTimeout(m.passthroughPath, time.Second*10)
-	} else if expected.passthroughPath != "" {
+	if expected.passthroughPath != "" {
 		call.PassthroughWithTimeout(expected.passthroughPath, time.Second*10)
 	} else if expected.callFunc != nil {
 		expected.callFunc(call)
@@ -155,31 +146,7 @@ func (m *Mock) invoke(call *Call) {
 	m.invocations = append(m.invocations, invocation)
 }
 
-// PassthroughToLocalCommand executes the mock name as a local command (looked up in PATH) and then passes
-// the result as the result of the mock. Useful for assertions that commands happen, but where
-// you want the command to actually be executed.
-func (m *Mock) PassthroughToLocalCommand() *Mock {
-	m.Lock()
-	defer m.Unlock()
-	debugf("[mock] Looking up %s in path", m.Name)
-	path, err := exec.LookPath(m.Name)
-	if err != nil {
-		panic(err)
-	}
-	m.passthroughPath = path
-	return m
-}
-
-// IgnoreUnexpectedInvocations allows for invocations without matching call expectations
-// to just silently return 0 and no output
-func (m *Mock) IgnoreUnexpectedInvocations() *Mock {
-	m.Lock()
-	defer m.Unlock()
-	m.ignoreUnexpected = true
-	return m
-}
-
-// Before adds a middleware that is run before the Invocation is dispatched
+// Before adds a middleware that is called before the invocation is processes
 func (m *Mock) Before(f func(i Invocation) error) *Mock {
 	m.Lock()
 	defer m.Unlock()
@@ -242,20 +209,18 @@ func (m *Mock) Check(t TestingT) bool {
 	}
 
 	// next check if we have invocations without expectations
-	if !m.ignoreUnexpected {
-		for _, invocation := range m.invocations {
-			if invocation.Expectation == nil {
-				t.Logf("Unexpected call to %s %s",
-					m.Name, FormatStrings(invocation.Args))
-				unexpectedInvocations++
-			}
+	for _, invocation := range m.invocations {
+		if invocation.Expectation == nil {
+			t.Logf("Unexpected call to %s %s",
+				m.Name, FormatStrings(invocation.Args))
+			unexpectedInvocations++
 		}
+	}
 
-		if unexpectedInvocations > 0 {
-			t.Errorf("More invocations than expected (%d vs %d)",
-				unexpectedInvocations,
-				len(m.invocations))
-		}
+	if unexpectedInvocations > 0 {
+		t.Errorf("More invocations than expected (%d vs %d)",
+			unexpectedInvocations,
+			len(m.invocations))
 	}
 
 	return unexpectedInvocations == 0 && failedExpectations == 0
