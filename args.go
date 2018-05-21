@@ -6,16 +6,6 @@ import (
 	"strings"
 )
 
-func ArgumentsFromStrings(s []string) Arguments {
-	args := make([]interface{}, len(s))
-
-	for idx, v := range s {
-		args[idx] = v
-	}
-
-	return args
-}
-
 type ArgumentsMatchResult struct {
 	IsMatch     bool
 	MatchCount  int
@@ -23,6 +13,10 @@ type ArgumentsMatchResult struct {
 }
 
 type Arguments []interface{}
+
+func (a Arguments) String() string {
+	return formatInterfaces(a)
+}
 
 func (a Arguments) Match(x ...string) (result ArgumentsMatchResult) {
 	for i, expected := range a {
@@ -92,10 +86,6 @@ func findCommonPrefix(s1, s2 []rune) int {
 	return maxLength
 }
 
-func (a Arguments) String() string {
-	return FormatInterfaces(a)
-}
-
 type Matcher interface {
 	fmt.Stringer
 	Match(s string) (bool, string)
@@ -135,7 +125,7 @@ func MatchPattern(pattern string) Matcher {
 }
 
 // Prints a slice of strings as quoted arguments
-func FormatStrings(a []string) string {
+func formatStrings(a []string) string {
 	var s = make([]string, len(a))
 	for idx := range a {
 		s[idx] = fmt.Sprintf("%q", a[idx])
@@ -144,7 +134,7 @@ func FormatStrings(a []string) string {
 }
 
 // Prints a slice of interface{} as quoted arguments
-func FormatInterfaces(a []interface{}) string {
+func formatInterfaces(a []interface{}) string {
 	var s = make([]string, len(a))
 	for idx := range a {
 		switch t := a[idx].(type) {

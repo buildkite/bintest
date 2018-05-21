@@ -36,7 +36,7 @@ type Mock struct {
 	invocations []Invocation
 
 	// The executions expected of the binary
-	expected ExpectationSet
+	expected expectationSet
 
 	// A list of middleware functions to call before invocation
 	before []func(i Invocation) error
@@ -110,14 +110,14 @@ func (m *Mock) invoke(call *Call) {
 		}
 	}
 
-	result := m.expected.ForArguments(call.Args[1:]...)
-	expected, err := result.Match()
+	results := m.expected.Filter(invocation)
+	expected, err := results.Match()
 	if err != nil {
 		debugf("No match found for expectation: %v", err)
 
 		m.invocations = append(m.invocations, invocation)
-		if err == ErrNoExpectationsMatch {
-			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %s\033[0m\n", result.ClosestMatch().Explain())
+		if err == errNoExpectationsMatch {
+			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %s\033[0m\n", results.ClosestMatch().Explain())
 			call.Exit(1)
 		} else {
 			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error: %v\033[0m\n", err)
@@ -127,7 +127,6 @@ func (m *Mock) invoke(call *Call) {
 	}
 
 	debugf("Found expectation: %s", expected)
-
 	invocation.Expectation = expected
 
 	if expected.passthroughPath != "" {
@@ -212,7 +211,7 @@ func (m *Mock) Check(t TestingT) bool {
 	for _, invocation := range m.invocations {
 		if invocation.Expectation == nil {
 			t.Logf("Unexpected call to %s %s",
-				m.Name, FormatStrings(invocation.Args))
+				m.Name, formatStrings(invocation.Args))
 			unexpectedInvocations++
 		}
 	}

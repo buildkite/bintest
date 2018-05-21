@@ -45,6 +45,9 @@ type Expectation struct {
 
 	// Buffers to copy to stdout and stderr
 	writeStdout, writeStderr *bytes.Buffer
+
+	// Certain env vars that must be set
+	withEnv []string
 }
 
 // Exactly expects exactly n invocations of this expectation
@@ -94,7 +97,7 @@ func (e *Expectation) AtLeastOnce() *Expectation {
 	return e.Min(1).Max(InfiniteTimes)
 }
 
-// AndEndsWith causes the invoker to finish with an exit code of code
+// AndExitWith causes the invoker to finish with an exit code of code
 func (e *Expectation) AndExitWith(code int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -146,6 +149,12 @@ func (e *Expectation) AndCallFunc(f func(*Call)) *Expectation {
 	defer e.Unlock()
 	e.callFunc = f
 	e.passthroughPath = ""
+	return e
+}
+
+// WithEnv matches invocations with specific environment variables
+func (e *Expectation) WithEnv(env ...string) *Expectation {
+	e.withEnv = env
 	return e
 }
 
@@ -207,33 +216,33 @@ func (e *Expectation) String() string {
 	return strings.TrimSpace(out.String())
 }
 
-var ErrNoExpectationsMatch = errors.New("No expectations match")
+var errNoExpectationsMatch = errors.New("No expectations match")
 
 // ExpectationResult is the result of a set of Arguments applied to an Expectation
-type ExpectationResult struct {
+type expectationResult struct {
 	Arguments            []string
 	Expectation          *Expectation
 	ArgumentsMatchResult ArgumentsMatchResult
 	CallCountMatch       bool
 }
 
-// ExpectationResultSet is a collection of ExpectationResult
-type ExpectationResultSet []ExpectationResult
+// expectationResultSet is a collection of expectationResult
+type expectationResultSet []expectationResult
 
 // ExactMatch returns the first Expectation that matches exactly
-func (r ExpectationResultSet) Match() (*Expectation, error) {
+func (r expectationResultSet) Match() (*Expectation, error) {
 	for _, row := range r {
 		if row.ArgumentsMatchResult.IsMatch && row.CallCountMatch {
 			return row.Expectation, nil
 		}
 	}
-	return nil, ErrNoExpectationsMatch
+	return nil, errNoExpectationsMatch
 }
 
 // BestMatch returns the ExpectationResult that was the closest match (if not the exact)
 // This is used for suggesting what the user might have meant
-func (r ExpectationResultSet) ClosestMatch() ExpectationResult {
-	var closest ExpectationResult
+func (r expectationResultSet) ClosestMatch() expectationResult {
+	var closest expectationResult
 	var bestCount int
 	var matched bool
 
@@ -254,7 +263,7 @@ func (r ExpectationResultSet) ClosestMatch() ExpectationResult {
 }
 
 // Explain returns an explanation of why the Expectation didn't match
-func (r ExpectationResult) Explain() string {
+func (r expectationResult) Explain() string {
 	if r.Expectation == nil {
 		return "No expectations matched call"
 	} else if r.ArgumentsMatchResult.IsMatch && !r.CallCountMatch {
@@ -267,25 +276,25 @@ func (r ExpectationResult) Explain() string {
 }
 
 // ExpectationSet is a set of expectations
-type ExpectationSet []*Expectation
+type expectationSet []*Expectation
 
-// ForArguments applies arguments to the expectations and returns the results
-func (exp ExpectationSet) ForArguments(args ...string) (result ExpectationResultSet) {
+// Filter filters down an expectationSet to possible matches on the Invocation
+func (exp expectationSet) Filter(inv Invocation) (result expectationResultSet) {
 	for _, e := range exp {
 		e.RLock()
 		defer e.RUnlock()
 
 		var argResult ArgumentsMatchResult
 
-		// If provided, use a custom function for matching
+		// If provided, use a custom function for matching arguments
 		if e.matcherFunc != nil {
-			argResult = e.matcherFunc(args...)
+			argResult = e.matcherFunc(inv.Args...)
 		} else {
-			argResult = e.arguments.Match(args...)
+			argResult = e.arguments.Match(inv.Args...)
 		}
 
-		result = append(result, ExpectationResult{
-			Arguments:            args,
+		result = append(result, expectationResult{
+			Arguments:            inv.Args,
 			Expectation:          e,
 			ArgumentsMatchResult: argResult,
 			CallCountMatch:       (e.maxCalls == InfiniteTimes || e.totalCalls < e.maxCalls),

@@ -288,7 +288,7 @@ func (c *Call) passthrough(ctx context.Context, path string, args ...string) {
 	}
 
 	// Print progress on execution to make debugging easier. We need to check the context because
-	// stopping the ticker won't actually close the
+	// stopping the ticker won't actually close the channel
 	go func() {
 		for {
 			select {

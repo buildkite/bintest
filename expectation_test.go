@@ -7,13 +7,13 @@ import (
 )
 
 func TestMatchExpectations(t *testing.T) {
-	var exp = ExpectationSet{
+	var exp = expectationSet{
 		{name: "test", arguments: Arguments{"llamas", "rock"}, minCalls: 1, maxCalls: 5},
 		{name: "test", arguments: Arguments{"llamas", "are", "ok"}, minCalls: 1, maxCalls: 5},
 		{name: "blargh", arguments: Arguments{"alpacas", "too"}, minCalls: 1, maxCalls: 5},
 	}
 
-	match, err := exp.ForArguments("llamas", "are", "ok").Match()
+	match, err := exp.Filter(Invocation{Args: []string{"llamas", "are", "ok"}}).Match()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,13 +24,13 @@ func TestMatchExpectations(t *testing.T) {
 }
 
 func TestMatchOverlappingExpectations(t *testing.T) {
-	var exp = ExpectationSet{
+	var exp = expectationSet{
 		{name: "test", arguments: Arguments{"llamas", "rock"}, totalCalls: 1, minCalls: 1, maxCalls: 1},
 		{name: "blargh", arguments: Arguments{"alpacas", "too"}, minCalls: 1, maxCalls: 5},
 		{name: "test", arguments: Arguments{"llamas", "rock"}, minCalls: 1, maxCalls: 5},
 	}
 
-	match, err := exp.ForArguments("llamas", "rock").Match()
+	match, err := exp.Filter(Invocation{Args: []string{"llamas", "rock"}}).Match()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,13 +41,13 @@ func TestMatchOverlappingExpectations(t *testing.T) {
 }
 
 func TestExplainExpectationMatch(t *testing.T) {
-	var exp = ExpectationSet{
+	var exp = expectationSet{
 		{name: "test", arguments: Arguments{"llamas", "rock"}, totalCalls: 1, minCalls: 1, maxCalls: 1},
 		{name: "blargh", arguments: Arguments{"alpacas"}, minCalls: 1, maxCalls: 5},
 		{name: "test", arguments: Arguments{"llamas", "rock"}, minCalls: 1, maxCalls: 5},
 	}
 
-	actual := exp.ForArguments("llamas", "ro").ClosestMatch().Explain()
+	actual := exp.Filter(Invocation{Args: []string{"llamas", "ro"}}).ClosestMatch().Explain()
 	expected := `Argument #2 doesn't match: Differs at character 3, expected "ck", got ""`
 
 	if actual != expected {
