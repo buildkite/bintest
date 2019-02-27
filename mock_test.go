@@ -504,8 +504,6 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 func TestCallingMockWithRelativePath(t *testing.T) {
 	defer tearDown(t)()
 
-	bintest.Debug = true
-
 	m, err := bintest.NewMock("testmock")
 	if err != nil {
 		t.Fatal(err)
