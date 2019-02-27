@@ -172,7 +172,6 @@ func (p *Proxy) newCall(pid int, args []string, env []string, dir string) *Call 
 // Close the proxy and remove the temp directory
 func (p *Proxy) Close() error {
 	p.Server.deregisterProxy(p)
-	close(p.Ch)
 
 	if p.tempDir != "" {
 		if removeErr := os.RemoveAll(p.tempDir); removeErr != nil {
