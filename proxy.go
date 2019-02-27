@@ -176,7 +176,7 @@ func (p *Proxy) Close() error {
 
 	if p.tempDir != "" {
 		if removeErr := os.RemoveAll(p.tempDir); removeErr != nil {
-			return err
+			return removeErr
 		}
 	}
 
