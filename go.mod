@@ -1,4 +1,4 @@
-module github.com/buildkite/bintest/v2
+module github.com/buildkite/bintest/v3
 
 go 1.12
 
