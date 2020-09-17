@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/buildkite/bintest"
+	"github.com/buildkite/bintest/v2"
 	"github.com/fortytw2/leaktest"
 )
 

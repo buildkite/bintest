@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/buildkite/bintest"
+	"github.com/buildkite/bintest/v2"
 )
 
 func ExampleCompileProxy() {

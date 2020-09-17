@@ -20,7 +20,7 @@ const (
 	clientSrc = `package main
 
 import (
-	"github.com/buildkite/bintest"
+	"github.com/buildkite/bintest/v2"
 	"os"
 )
 
