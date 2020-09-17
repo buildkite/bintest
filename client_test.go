@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/buildkite/bintest"
+	"github.com/buildkite/bintest/v2"
 )
 
 func TestClient(t *testing.T) {
