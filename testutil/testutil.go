@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -45,4 +46,16 @@ func WriteBatchFile(t *testing.T, name string, lines []string) string {
 // NormalizeNewlines converts Windows newlines to Unix style
 func NormalizeNewlines(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
+}
+
+// ClosingBuffer adds Close() to bytes.Buffer, such that it implements the
+// io.WriteCloser interface in addition to e.g. fmt.Stringer interfaces that
+// bytes.Buffer already implements.
+type ClosingBuffer struct {
+	bytes.Buffer
+}
+
+// Close does nothing
+func (bc *ClosingBuffer) Close() error {
+	return nil
 }
