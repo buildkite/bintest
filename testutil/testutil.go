@@ -26,6 +26,16 @@ func (t *TestingT) Errorf(format string, args ...interface{}) {
 	t.Errors = append(t.Errors, fmt.Sprintf(format, args...))
 }
 
+// Copy dumps the Logs and Errors into another test context
+func (t *TestingT) Copy(dst *testing.T) {
+	for _, s := range t.Logs {
+		dst.Log(s)
+	}
+	for _, s := range t.Errors {
+		dst.Error(s)
+	}
+}
+
 // WriteBatchFile writes the given lines as a windows batch file of the given
 // name in a new temporary directory.
 func WriteBatchFile(t *testing.T, name string, lines []string) string {

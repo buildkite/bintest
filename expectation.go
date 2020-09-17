@@ -41,6 +41,12 @@ type Expectation struct {
 	// Times expected to be called
 	minCalls, maxCalls int
 
+	// stdin expectation, as a string or a Matcher
+	stdin interface{}
+
+	// A copy of the stdin data read by the call
+	readStdin []byte
+
 	// Buffers to copy to stdout and stderr
 	writeStdout, writeStderr *bytes.Buffer
 }
@@ -90,6 +96,14 @@ func (e *Expectation) Once() *Expectation {
 // AtLeastOnce expects a minimum invocations of 0 and a max of InfinityTimes
 func (e *Expectation) AtLeastOnce() *Expectation {
 	return e.Min(1).Max(InfiniteTimes)
+}
+
+// WithStdin sets an expectation on the stdin received by the command.
+func (e *Expectation) WithStdin(match interface{}) *Expectation {
+	e.Lock()
+	defer e.Unlock()
+	e.stdin = match
+	return e
 }
 
 // AndExitWith causes the invoker to finish with an exit code of code
@@ -162,6 +176,12 @@ func (e *Expectation) WithAnyArguments() *Expectation {
 
 // Check evaluates the expectation and outputs failures to the provided testing.T object
 func (e *Expectation) Check(t TestingT) bool {
+	okCallCount := e.checkCallCount(t)
+	okStdin := e.checkStdin(t)
+	return okCallCount && okStdin
+}
+
+func (e *Expectation) checkCallCount(t TestingT) bool {
 	if e.minCalls != InfiniteTimes && e.totalCalls < e.minCalls {
 		t.Logf("Expected [%s %s] to be called at least %d times, got %d",
 			e.name, e.arguments.String(), e.minCalls, e.totalCalls,
@@ -172,6 +192,31 @@ func (e *Expectation) Check(t TestingT) bool {
 			e.name, e.arguments.String(), e.maxCalls, e.totalCalls,
 		)
 		return false
+	}
+	return true
+}
+
+func (e *Expectation) checkStdin(t TestingT) bool {
+	actual := string(e.readStdin)
+	switch expected := e.stdin.(type) {
+	case string:
+		if expected != actual {
+			if len(actual) <= 64 {
+				t.Logf("Expected stdin %q, got %q", expected, actual)
+			} else {
+				t.Logf("Expected %d bytes stdin, got %d bytes", len(expected), len(e.readStdin))
+			}
+			return false
+		}
+	case Matcher:
+		if ok, msg := expected.Match(actual); !ok {
+			t.Logf("%s %s for stdin %q", expected, msg, actual)
+			return false
+		}
+	case nil:
+		// no expectation
+	default:
+		panic("unhandled stdin expectation type")
 	}
 	return true
 }

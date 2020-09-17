@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -14,6 +15,97 @@ import (
 	"github.com/buildkite/bintest/v3/testutil"
 	"github.com/fortytw2/leaktest"
 )
+
+func TestCallingMockWithStdinExpectedString(t *testing.T) {
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "test")
+	defer close()
+
+	m.Expect().WithStdin("the input")
+
+	cmd := exec.Command(m.Path)
+	cmd.Stdin = strings.NewReader("the input")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	mt := &testutil.TestingT{}
+	if m.Check(mt) == false {
+		t.Error("Mock.Check() failed")
+	}
+	mt.Copy(t)
+}
+
+func TestCallingMockWithStdinExpectedStringFailing(t *testing.T) {
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "test")
+	defer close()
+
+	m.Expect().WithStdin("the expected")
+
+	cmd := exec.Command(m.Path)
+	cmd.Stdin = strings.NewReader("the unexpected")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	mt := &testutil.TestingT{}
+	if m.Check(mt) == true {
+		t.Error("Mock.Check() should have failed, but didn't")
+	}
+	if s := strings.Join(mt.Errors, "\n"); s != `Not all expectations were met (0 out of 1)` {
+		t.Errorf("Errors: %q", s)
+	}
+	if s := strings.Join(mt.Logs, "\n"); s != `Expected stdin "the expected", got "the unexpected"` {
+		t.Errorf("Logs: %q", s)
+	}
+}
+
+func TestCallingMockWithStdinExpectedMatcher(t *testing.T) {
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "test")
+	defer close()
+
+	m.Expect().WithStdin(bintest.MatchPattern("^the"))
+
+	cmd := exec.Command(m.Path)
+	cmd.Stdin = strings.NewReader("the input")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	mt := &testutil.TestingT{}
+	if m.Check(mt) == false {
+		t.Error("Mock.Check() failed")
+	}
+	mt.Copy(t)
+}
+
+func TestCallingMockWithStdinExpectedAndPassthrough(t *testing.T) {
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "tr")
+	defer close()
+
+	m.PassthroughToLocalCommand()
+	m.Expect("hs", "HS").WithStdin("hello stdin")
+
+	cmd := exec.Command(m.Path, "hs", "HS")
+	cmd.Stdin = strings.NewReader("hello stdin")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if expected, actual := "Hello Stdin", string(out); expected != actual {
+		t.Errorf("Expected stdout %q, got %q", expected, actual)
+	}
+
+	mt := &testutil.TestingT{}
+	if m.Check(mt) == false {
+		t.Error("Mock.Check() failed")
+	}
+	mt.Copy(t)
+}
 
 func TestCallingMockWithStderrExpected(t *testing.T) {
 	defer leaktest.Check(t)()

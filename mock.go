@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -136,6 +137,19 @@ func (m *Mock) invoke(call *Call) {
 	debugf("Found expectation: %s", expected)
 
 	invocation.Expectation = expected
+
+	if expected.stdin != nil {
+		// read all of stdin
+		buf, err := ioutil.ReadAll(call.Stdin)
+		if err != nil {
+			panic("error reading stdin")
+		}
+		// copy to Expectation
+		expected.readStdin = make([]byte, len(buf))
+		copy(expected.readStdin, buf)
+		// restore original stdin
+		call.Stdin = ioutil.NopCloser(bytes.NewReader(buf))
+	}
 
 	if m.passthroughPath != "" {
 		call.PassthroughWithTimeout(m.passthroughPath, time.Second*10)
