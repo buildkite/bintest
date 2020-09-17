@@ -15,7 +15,7 @@ import (
 	"github.com/fortytw2/leaktest"
 )
 
-func TestCallingMockWithStdErrExpected(t *testing.T) {
+func TestCallingMockWithStderrExpected(t *testing.T) {
 	defer leaktest.Check(t)()
 	m, close := mustMock(t, "test")
 	defer close()
@@ -36,7 +36,7 @@ func TestCallingMockWithStdErrExpected(t *testing.T) {
 	}
 }
 
-func TestCallingMockWithStdOutExpected(t *testing.T) {
+func TestCallingMockWithStdoutExpected(t *testing.T) {
 	defer leaktest.Check(t)()
 	m, close := mustMock(t, "test")
 	defer close()
