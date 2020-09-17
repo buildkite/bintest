@@ -20,15 +20,8 @@ import (
 	"github.com/fortytw2/leaktest"
 )
 
-func proxyTearDown(t *testing.T) func() {
-	leakTest := leaktest.Check(t)
-	return func() {
-		leakTest()
-	}
-}
-
 func TestProxyWithStdin(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -71,7 +64,7 @@ func TestProxyWithStdin(t *testing.T) {
 }
 
 func TestProxyWithStdout(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -107,7 +100,7 @@ func TestProxyWithStdout(t *testing.T) {
 }
 
 func TestProxyWithStderr(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -142,7 +135,7 @@ func TestProxyWithStderr(t *testing.T) {
 }
 
 func TestProxyWithStdoutAndStderr(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -189,7 +182,7 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 }
 
 func TestProxyWithNoOutput(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -211,7 +204,7 @@ func TestProxyWithNoOutput(t *testing.T) {
 }
 
 func TestProxyWithLotsOfOutput(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	var expected string
 	for i := 0; i < 10; i++ {
@@ -257,7 +250,7 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 }
 
 func TestProxyWithNonZeroExitCode(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -295,7 +288,7 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 }
 
 func TestProxyCloseRemovesFile(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -333,7 +326,7 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 }
 
 func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	tempDir, err := ioutil.TempDir("", "proxy-wd-test")
 	if err != nil {
@@ -374,7 +367,7 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	echoCmd := `/bin/echo`
 	if runtime.GOOS == `windows` {
@@ -421,7 +414,7 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithStdin(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	catCmd := `/bin/cat`
 	if runtime.GOOS == `windows` {
@@ -467,7 +460,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	falseCmd := `/usr/bin/false`
 	if runtime.GOOS == `windows` {
@@ -502,7 +495,7 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithTimeout(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	if runtime.GOOS == `windows` {
 		t.Skipf("Not implemented for windows")
@@ -536,7 +529,7 @@ func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 }
 
 func TestProxyCallingInParallel(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	var wg sync.WaitGroup
 

@@ -27,15 +27,8 @@ func (t *testingT) Errorf(format string, args ...interface{}) {
 	t.Errors = append(t.Errors, fmt.Sprintf(format, args...))
 }
 
-func tearDown(t *testing.T) func() {
-	leakTest := leaktest.Check(t)
-	return func() {
-		leakTest()
-	}
-}
-
 func TestCallingMockWithStdErrExpected(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "test")
 	defer close()
 
@@ -56,7 +49,7 @@ func TestCallingMockWithStdErrExpected(t *testing.T) {
 }
 
 func TestCallingMockWithStdOutExpected(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "test")
 	defer close()
 
@@ -77,7 +70,7 @@ func TestCallingMockWithStdOutExpected(t *testing.T) {
 }
 
 func TestCallingMockWithNoExpectationsSet(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "test")
 	defer close()
 
@@ -93,7 +86,7 @@ func TestCallingMockWithNoExpectationsSet(t *testing.T) {
 }
 
 func TestCallingMockWithExpectationsSet(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "test")
 	defer close()
 
@@ -118,7 +111,7 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 }
 
 func TestMockWithPassthroughToLocalCommand(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "echo")
 	defer close()
 
@@ -153,7 +146,7 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.label, func(t *testing.T) {
-			defer tearDown(t)()
+			defer leaktest.Check(t)()
 
 			m, err := bintest.NewMock("test")
 			if err != nil {
@@ -184,7 +177,7 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 }
 
 func TestMockWithCallFunc(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "echo")
 	defer close()
 
@@ -211,7 +204,7 @@ func TestMockWithCallFunc(t *testing.T) {
 }
 
 func TestMockRequiresExpectations(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "llamas")
 	defer close()
 
@@ -225,7 +218,7 @@ func TestMockRequiresExpectations(t *testing.T) {
 }
 
 func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "llamas")
 	defer close()
 
@@ -247,7 +240,7 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 }
 
 func TestMockOptionally(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "llamas")
 	defer close()
 
@@ -280,7 +273,7 @@ func TestMockMultipleExpects(t *testing.T) {
 }
 
 func TestMockExpectWithNoArguments(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "llamas")
 	defer close()
 
@@ -295,7 +288,7 @@ func TestMockExpectWithNoArguments(t *testing.T) {
 }
 
 func TestMockExpectWithMatcherFunc(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "llamas")
 	defer close()
 
@@ -316,7 +309,7 @@ func TestMockExpectWithMatcherFunc(t *testing.T) {
 }
 
 func TestMockExpectWithBefore(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "true")
 	defer close()
 
@@ -344,7 +337,7 @@ func TestMockExpectWithBefore(t *testing.T) {
 }
 
 func TestMockParallelCommandsWithPassthrough(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 
 	var wg sync.WaitGroup
 
@@ -385,7 +378,7 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 }
 
 func TestCallingMockWithRelativePath(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 	m, close := mustMock(t, "testmock")
 	defer close()
 
