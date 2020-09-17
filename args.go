@@ -134,7 +134,7 @@ func MatchPattern(pattern string) Matcher {
 	}
 }
 
-// Prints a slice of strings as quoted arguments
+// FormatStrings formats a slice of strings as quoted comma-separated arguments
 func FormatStrings(a []string) string {
 	var s = make([]string, len(a))
 	for idx := range a {
@@ -143,7 +143,7 @@ func FormatStrings(a []string) string {
 	return strings.Join(s, ", ")
 }
 
-// Prints a slice of interface{} as quoted arguments
+// FormatInterfaces formats a slice of interface{} as quoted comma-separated arguments
 func FormatInterfaces(a []interface{}) string {
 	var s = make([]string, len(a))
 	for idx := range a {

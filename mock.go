@@ -52,7 +52,7 @@ type Mock struct {
 	passthroughPath string
 }
 
-// Mock returns a new Mock instance, or fails if the bintest fails to compile
+// NewMock builds a new Mock, or an error if the bintest fails to compile
 func NewMock(path string) (*Mock, error) {
 	m := &Mock{}
 

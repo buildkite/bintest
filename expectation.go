@@ -92,7 +92,7 @@ func (e *Expectation) AtLeastOnce() *Expectation {
 	return e.Min(1).Max(InfiniteTimes)
 }
 
-// AndEndsWith causes the invoker to finish with an exit code of code
+// AndExitWith causes the invoker to finish with an exit code of code
 func (e *Expectation) AndExitWith(code int) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -110,7 +110,7 @@ func (e *Expectation) AndWriteToStdout(s string) *Expectation {
 	return e
 }
 
-// AndWriteToStdout causes the invoker to output s to stderr. This resets any passthrough path set
+// AndWriteToStderr causes the invoker to output s to stderr. This resets any passthrough path set
 func (e *Expectation) AndWriteToStderr(s string) *Expectation {
 	e.Lock()
 	defer e.Unlock()
@@ -207,7 +207,8 @@ type ExpectationResult struct {
 // ExpectationResultSet is a collection of ExpectationResult
 type ExpectationResultSet []ExpectationResult
 
-// ExactMatch returns the first Expectation that matches exactly
+// Match returns the first Expectation that matches exactly,
+// or ErrNoExpectationsMatch if none match.
 func (r ExpectationResultSet) Match() (*Expectation, error) {
 	for _, row := range r {
 		if row.ArgumentsMatchResult.IsMatch && row.CallCountMatch {
@@ -217,7 +218,7 @@ func (r ExpectationResultSet) Match() (*Expectation, error) {
 	return nil, ErrNoExpectationsMatch
 }
 
-// BestMatch returns the ExpectationResult that was the closest match (if not the exact)
+// ClosestMatch returns the ExpectationResult that was the closest match (if not the exact)
 // This is used for suggesting what the user might have meant
 func (r ExpectationResultSet) ClosestMatch() ExpectationResult {
 	var closest ExpectationResult
