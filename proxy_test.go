@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/buildkite/bintest/v3"
+	"github.com/buildkite/bintest/v3/testutil"
 	"github.com/fortytw2/leaktest"
 )
 
@@ -373,7 +373,7 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 	if runtime.GOOS == `windows` {
 		// Question every life choice that has lead you to want to understand the below
 		// https://ss64.com/nt/syntax-esc.html
-		echoCmd = writeBatchFile(t, "echo.bat", []string{
+		echoCmd = testutil.WriteBatchFile(t, "echo.bat", []string{
 			`@ECHO OFF`,
 			`Set _string=%~1`,
 			`Echo %_string%`,
@@ -407,7 +407,7 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := normalizeNewlines(outBuf.String())
+	out := testutil.NormalizeNewlines(outBuf.String())
 	if expected := "hello world\n"; out != expected {
 		t.Fatalf("Expected stdout to be %q, got %q", expected, out)
 	}
@@ -418,7 +418,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 
 	catCmd := `/bin/cat`
 	if runtime.GOOS == `windows` {
-		catCmd = writeBatchFile(t, "cat.bat", []string{
+		catCmd = testutil.WriteBatchFile(t, "cat.bat", []string{
 			`@ECHO OFF`,
 			`FIND/V ""`,
 		})
@@ -434,7 +434,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 		}
 	}()
 
-	inBuf := bytes.NewBufferString(normalizeNewlines("hello world\n"))
+	inBuf := bytes.NewBufferString(testutil.NormalizeNewlines("hello world\n"))
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path)
@@ -452,7 +452,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := normalizeNewlines(outBuf.String())
+	out := testutil.NormalizeNewlines(outBuf.String())
 
 	if expected := "hello world\n"; out != expected {
 		t.Fatalf("Expected stdout to be %q, got %q", expected, out)
@@ -464,7 +464,7 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 
 	falseCmd := `/usr/bin/false`
 	if runtime.GOOS == `windows` {
-		falseCmd = writeBatchFile(t, "false.bat", []string{
+		falseCmd = testutil.WriteBatchFile(t, "false.bat", []string{
 			`@ECHO OFF`,
 			`EXIT /B 1`,
 		})
@@ -566,25 +566,6 @@ func TestProxyCallingInParallel(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-func writeBatchFile(t *testing.T, name string, lines []string) string {
-	tmpDir, err := ioutil.TempDir("", "batch-files-of-horror")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	batchfile := filepath.Join(tmpDir, name)
-	err = ioutil.WriteFile(batchfile, []byte(strings.Join(lines, "\r\n")), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return batchfile
-}
-
-func normalizeNewlines(s string) string {
-	return strings.Replace(s, "\r\n", "\n", -1)
 }
 
 func BenchmarkCreatingProxies(b *testing.B) {

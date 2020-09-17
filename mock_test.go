@@ -11,21 +11,9 @@ import (
 	"testing"
 
 	"github.com/buildkite/bintest/v3"
+	"github.com/buildkite/bintest/v3/testutil"
 	"github.com/fortytw2/leaktest"
 )
-
-type testingT struct {
-	Logs   []string
-	Errors []string
-}
-
-func (t *testingT) Logf(format string, args ...interface{}) {
-	t.Logs = append(t.Logs, fmt.Sprintf(format, args...))
-}
-
-func (t *testingT) Errorf(format string, args ...interface{}) {
-	t.Errors = append(t.Errors, fmt.Sprintf(format, args...))
-}
 
 func TestCallingMockWithStdErrExpected(t *testing.T) {
 	defer leaktest.Check(t)()
@@ -39,7 +27,7 @@ func TestCallingMockWithStdErrExpected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mt := &testingT{}
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
 	}
@@ -60,7 +48,7 @@ func TestCallingMockWithStdOutExpected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mt := &testingT{}
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
 	}
@@ -79,7 +67,7 @@ func TestCallingMockWithNoExpectationsSet(t *testing.T) {
 		t.Errorf("Expected a failure without any expectations set")
 	}
 
-	mt := &testingT{}
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed (there were none)")
 	}
@@ -104,7 +92,7 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 		t.Fatalf("Unexpected output %q", out)
 	}
 
-	mt := &testingT{}
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
 	}
@@ -123,7 +111,7 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have passed")
 	}
 	if expected := "hello world\n"; string(out) != expected {
@@ -198,7 +186,7 @@ func TestMockWithCallFunc(t *testing.T) {
 	if string(out) != "hello world\n" {
 		t.Fatalf("Unexpected output %q", out)
 	}
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have passed")
 	}
 }
@@ -212,7 +200,7 @@ func TestMockRequiresExpectations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have failed")
 	}
 }
@@ -234,7 +222,7 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 	_ = exec.Command(m.Path, "fourth", "call").Run()
 	_ = exec.Command(m.Path, "fifth", "call").Run()
 
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have passed")
 	}
 }
@@ -392,7 +380,7 @@ func TestCallingMockWithRelativePath(t *testing.T) {
 		t.Errorf("Expected no failures: %v", err)
 	}
 
-	mt := &testingT{}
+	mt := &testutil.TestingT{}
 
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
