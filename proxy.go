@@ -38,8 +38,8 @@ type Proxy struct {
 	tempDir string
 }
 
-// Compile generates a mock binary at the provided path. If just a filename is provided a temp
-// directory is created.
+// CompileProxy generates a mock binary at the provided path.
+// If just a filename is provided a temp directory is created.
 func CompileProxy(path string) (*Proxy, error) {
 	var tempDir string
 
@@ -313,7 +313,7 @@ func (c *Call) passthrough(ctx context.Context, path string, args ...string) {
 	c.Exit(0)
 }
 
-// Returns true if the call is done, doesn't block and is thread-safe
+// IsDone is a non-blocking thread-safe checks whether the call is done.
 func (c *Call) IsDone() bool {
 	return atomic.LoadUint32(&c.done) == 1
 }

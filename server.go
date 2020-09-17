@@ -52,7 +52,7 @@ func StartServer() (*Server, error) {
 	return serverInstance, nil
 }
 
-// Stop the shared http server instance
+// StopServer stops the shared http server instance
 func StopServer() error {
 	serverLock.Lock()
 	defer serverLock.Unlock()

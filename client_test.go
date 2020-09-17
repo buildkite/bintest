@@ -1,7 +1,6 @@
 package bintest_test
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -9,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/buildkite/bintest/v3"
+	"github.com/buildkite/bintest/v3/testutil"
 )
 
 func TestClient(t *testing.T) {
@@ -33,8 +33,8 @@ func TestClient(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	stdout := &closingBuffer{}
-	stderr := &closingBuffer{}
+	stdout := &testutil.ClosingBuffer{}
+	stderr := &testutil.ClosingBuffer{}
 
 	c := bintest.Client{
 		Debug:  false,
@@ -48,21 +48,10 @@ func TestClient(t *testing.T) {
 	if exitCode := c.Run(); exitCode != 0 {
 		t.Fatalf("Expected error code of 0, got %d", exitCode)
 	}
-
 	if expected := "Success (stdout)!\n"; stdout.String() != expected {
 		t.Fatalf("Expected stdout of %q, got %q", expected, stdout.String())
 	}
-
 	if expected := "Success (stdout)!\n"; stdout.String() != expected {
 		t.Fatalf("Expected stdout of %q, got %q", expected, stdout.String())
 	}
-
-}
-
-type closingBuffer struct {
-	bytes.Buffer
-}
-
-func (cb *closingBuffer) Close() error {
-	return nil
 }

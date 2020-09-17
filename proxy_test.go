@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -17,18 +16,12 @@ import (
 	"time"
 
 	"github.com/buildkite/bintest/v3"
+	"github.com/buildkite/bintest/v3/testutil"
 	"github.com/fortytw2/leaktest"
 )
 
-func proxyTearDown(t *testing.T) func() {
-	leakTest := leaktest.Check(t)
-	return func() {
-		leakTest()
-	}
-}
-
 func TestProxyWithStdin(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -71,7 +64,7 @@ func TestProxyWithStdin(t *testing.T) {
 }
 
 func TestProxyWithStdout(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -107,7 +100,7 @@ func TestProxyWithStdout(t *testing.T) {
 }
 
 func TestProxyWithStderr(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -142,7 +135,7 @@ func TestProxyWithStderr(t *testing.T) {
 }
 
 func TestProxyWithStdoutAndStderr(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -189,7 +182,7 @@ func TestProxyWithStdoutAndStderr(t *testing.T) {
 }
 
 func TestProxyWithNoOutput(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -211,7 +204,7 @@ func TestProxyWithNoOutput(t *testing.T) {
 }
 
 func TestProxyWithLotsOfOutput(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	var expected string
 	for i := 0; i < 10; i++ {
@@ -257,7 +250,7 @@ func TestProxyWithLotsOfOutput(t *testing.T) {
 }
 
 func TestProxyWithNonZeroExitCode(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -295,7 +288,7 @@ func TestProxyWithNonZeroExitCode(t *testing.T) {
 }
 
 func TestProxyCloseRemovesFile(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	proxy, err := bintest.CompileProxy("test")
 	if err != nil {
@@ -333,7 +326,7 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 }
 
 func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	tempDir, err := ioutil.TempDir("", "proxy-wd-test")
 	if err != nil {
@@ -374,13 +367,13 @@ func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	echoCmd := `/bin/echo`
 	if runtime.GOOS == `windows` {
 		// Question every life choice that has lead you to want to understand the below
 		// https://ss64.com/nt/syntax-esc.html
-		echoCmd = writeBatchFile(t, "echo.bat", []string{
+		echoCmd = testutil.WriteBatchFile(t, "echo.bat", []string{
 			`@ECHO OFF`,
 			`Set _string=%~1`,
 			`Echo %_string%`,
@@ -414,18 +407,18 @@ func TestProxyWithPassthroughWithNoStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := normalizeNewlines(outBuf.String())
+	out := testutil.NormalizeNewlines(outBuf.String())
 	if expected := "hello world\n"; out != expected {
 		t.Fatalf("Expected stdout to be %q, got %q", expected, out)
 	}
 }
 
 func TestProxyWithPassthroughWithStdin(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	catCmd := `/bin/cat`
 	if runtime.GOOS == `windows` {
-		catCmd = writeBatchFile(t, "cat.bat", []string{
+		catCmd = testutil.WriteBatchFile(t, "cat.bat", []string{
 			`@ECHO OFF`,
 			`FIND/V ""`,
 		})
@@ -441,7 +434,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 		}
 	}()
 
-	inBuf := bytes.NewBufferString(normalizeNewlines("hello world\n"))
+	inBuf := bytes.NewBufferString(testutil.NormalizeNewlines("hello world\n"))
 	outBuf := &bytes.Buffer{}
 
 	cmd := exec.Command(proxy.Path)
@@ -459,7 +452,7 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := normalizeNewlines(outBuf.String())
+	out := testutil.NormalizeNewlines(outBuf.String())
 
 	if expected := "hello world\n"; out != expected {
 		t.Fatalf("Expected stdout to be %q, got %q", expected, out)
@@ -467,11 +460,11 @@ func TestProxyWithPassthroughWithStdin(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	falseCmd := `/usr/bin/false`
 	if runtime.GOOS == `windows` {
-		falseCmd = writeBatchFile(t, "false.bat", []string{
+		falseCmd = testutil.WriteBatchFile(t, "false.bat", []string{
 			`@ECHO OFF`,
 			`EXIT /B 1`,
 		})
@@ -502,7 +495,7 @@ func TestProxyWithPassthroughWithFailingCommand(t *testing.T) {
 }
 
 func TestProxyWithPassthroughWithTimeout(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	if runtime.GOOS == `windows` {
 		t.Skipf("Not implemented for windows")
@@ -536,7 +529,7 @@ func TestProxyWithPassthroughWithTimeout(t *testing.T) {
 }
 
 func TestProxyCallingInParallel(t *testing.T) {
-	defer proxyTearDown(t)()
+	defer leaktest.Check(t)()
 
 	var wg sync.WaitGroup
 
@@ -573,25 +566,6 @@ func TestProxyCallingInParallel(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-func writeBatchFile(t *testing.T, name string, lines []string) string {
-	tmpDir, err := ioutil.TempDir("", "batch-files-of-horror")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	batchfile := filepath.Join(tmpDir, name)
-	err = ioutil.WriteFile(batchfile, []byte(strings.Join(lines, "\r\n")), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return batchfile
-}
-
-func normalizeNewlines(s string) string {
-	return strings.Replace(s, "\r\n", "\n", -1)
 }
 
 func BenchmarkCreatingProxies(b *testing.B) {

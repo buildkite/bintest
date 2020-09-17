@@ -11,41 +11,14 @@ import (
 	"testing"
 
 	"github.com/buildkite/bintest/v3"
+	"github.com/buildkite/bintest/v3/testutil"
 	"github.com/fortytw2/leaktest"
 )
 
-type testingT struct {
-	Logs   []string
-	Errors []string
-}
-
-func (t *testingT) Logf(format string, args ...interface{}) {
-	t.Logs = append(t.Logs, fmt.Sprintf(format, args...))
-}
-
-func (t *testingT) Errorf(format string, args ...interface{}) {
-	t.Errors = append(t.Errors, fmt.Sprintf(format, args...))
-}
-
-func tearDown(t *testing.T) func() {
-	leakTest := leaktest.Check(t)
-	return func() {
-		leakTest()
-	}
-}
-
 func TestCallingMockWithStdErrExpected(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "test")
+	defer close()
 
 	m.Expect("blargh").AndWriteToStderr("llamas").AndExitWith(0)
 
@@ -54,29 +27,19 @@ func TestCallingMockWithStdErrExpected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mt := &testingT{}
-
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
 	}
-
 	if string(out) != "llamas" {
 		t.Fatalf("Expected llamas, got %q", out)
 	}
 }
 
 func TestCallingMockWithStdOutExpected(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "test")
+	defer close()
 
 	m.Expect("blargh").AndWriteToStdout("llamas").AndExitWith(0)
 
@@ -85,55 +48,35 @@ func TestCallingMockWithStdOutExpected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mt := &testingT{}
-
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
 	}
-
 	if string(out) != "llamas" {
 		t.Fatalf("Expected llamas, got %q", out)
-
 	}
 }
 
 func TestCallingMockWithNoExpectationsSet(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "test")
+	defer close()
 
-	m, err := bintest.NewMock("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	_, err = exec.Command(m.Path, "blargh").CombinedOutput()
+	_, err := exec.Command(m.Path, "blargh").CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected a failure without any expectations set")
 	}
 
-	mt := &testingT{}
-
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed (there were none)")
 	}
 }
 
 func TestCallingMockWithExpectationsSet(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "test")
+	defer close()
 
 	m.Expect("blargh").
 		AndWriteToStdout("llamas rock").
@@ -149,25 +92,16 @@ func TestCallingMockWithExpectationsSet(t *testing.T) {
 		t.Fatalf("Unexpected output %q", out)
 	}
 
-	mt := &testingT{}
-
+	mt := &testutil.TestingT{}
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
 	}
 }
 
 func TestMockWithPassthroughToLocalCommand(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("echo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "echo")
+	defer close()
 
 	m.PassthroughToLocalCommand()
 	m.Expect("hello world")
@@ -177,13 +111,10 @@ func TestMockWithPassthroughToLocalCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have passed")
 	}
-
-	expected := "hello world\n"
-
-	if string(out) != expected {
+	if expected := "hello world\n"; string(out) != expected {
 		t.Fatalf("Expected %q, got %q", expected, out)
 	}
 }
@@ -203,7 +134,7 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.label, func(t *testing.T) {
-			defer tearDown(t)()
+			defer leaktest.Check(t)()
 
 			m, err := bintest.NewMock("test")
 			if err != nil {
@@ -223,11 +154,9 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 					failures++
 				}
 			}
-
 			if failures > 0 {
 				t.Fatalf("Expected 0 failures, got %d", failures)
 			}
-
 			if m.Check(t) == false {
 				t.Errorf("Assertions should have passed")
 			}
@@ -236,17 +165,9 @@ func TestCallingMockWithExpectationsOfNumberOfCalls(t *testing.T) {
 }
 
 func TestMockWithCallFunc(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("echo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "echo")
+	defer close()
 
 	m.Expect("hello", "world").AndCallFunc(func(c *bintest.Call) {
 		if !reflect.DeepEqual(c.Args[1:], []string{"hello", "world"}) {
@@ -265,47 +186,29 @@ func TestMockWithCallFunc(t *testing.T) {
 	if string(out) != "hello world\n" {
 		t.Fatalf("Unexpected output %q", out)
 	}
-
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have passed")
 	}
 }
 
 func TestMockRequiresExpectations(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "llamas")
+	defer close()
 
-	m, err := bintest.NewMock("llamas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	err = exec.Command(m.Path, "first", "call").Run()
-	if err == nil {
+	if err := exec.Command(m.Path, "first", "call").Run(); err == nil {
 		t.Fatal(err)
 	}
 
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have failed")
 	}
 }
 
 func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("llamas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "llamas")
+	defer close()
 
 	m.IgnoreUnexpectedInvocations()
 	m.Expect("first", "call").Once()
@@ -319,23 +222,15 @@ func TestMockIgnoringUnexpectedInvocations(t *testing.T) {
 	_ = exec.Command(m.Path, "fourth", "call").Run()
 	_ = exec.Command(m.Path, "fifth", "call").Run()
 
-	if m.Check(&testingT{}) == false {
+	if m.Check(&testutil.TestingT{}) == false {
 		t.Errorf("Assertions should have passed")
 	}
 }
 
 func TestMockOptionally(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("llamas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "llamas")
+	defer close()
 
 	m.Expect("first", "call").Optionally()
 	m.Expect("third", "call").Once()
@@ -349,15 +244,8 @@ func TestMockOptionally(t *testing.T) {
 }
 
 func TestMockMultipleExpects(t *testing.T) {
-	m, err := bintest.NewMock("llamas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	m, close := mustMock(t, "llamas")
+	defer close()
 
 	m.Expect("first", "call")
 	m.Expect("first", "call")
@@ -373,17 +261,9 @@ func TestMockMultipleExpects(t *testing.T) {
 }
 
 func TestMockExpectWithNoArguments(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("llamas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "llamas")
+	defer close()
 
 	m.Expect().AtLeastOnce()
 
@@ -396,17 +276,9 @@ func TestMockExpectWithNoArguments(t *testing.T) {
 }
 
 func TestMockExpectWithMatcherFunc(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("llamas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "llamas")
+	defer close()
 
 	m.Expect().AtLeastOnce().WithMatcherFunc(func(arg ...string) bintest.ArgumentsMatchResult {
 		return bintest.ArgumentsMatchResult{
@@ -425,17 +297,9 @@ func TestMockExpectWithMatcherFunc(t *testing.T) {
 }
 
 func TestMockExpectWithBefore(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("true")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "true")
+	defer close()
 
 	m.PassthroughToLocalCommand().Before(func(i bintest.Invocation) error {
 		if err := bintest.ExpectEnv(t, i.Env, `MY_CUSTOM_ENV=1`, `LLAMAS_ROCK=absolutely`); err != nil {
@@ -451,7 +315,7 @@ func TestMockExpectWithBefore(t *testing.T) {
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 
-	if err = cmd.Run(); err != nil {
+	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -461,7 +325,7 @@ func TestMockExpectWithBefore(t *testing.T) {
 }
 
 func TestMockParallelCommandsWithPassthrough(t *testing.T) {
-	defer tearDown(t)()
+	defer leaktest.Check(t)()
 
 	var wg sync.WaitGroup
 
@@ -502,31 +366,35 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 }
 
 func TestCallingMockWithRelativePath(t *testing.T) {
-	defer tearDown(t)()
-
-	m, err := bintest.NewMock("testmock")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := m.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer leaktest.Check(t)()
+	m, close := mustMock(t, "testmock")
+	defer close()
 
 	m.Expect("blargh").Exactly(1)
 
 	cmd := exec.Command("./testmock", "blargh")
 	cmd.Dir = filepath.Dir(m.Path)
 
-	_, err = cmd.CombinedOutput()
+	_, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Errorf("Expected no failures: %v", err)
 	}
 
-	mt := &testingT{}
+	mt := &testutil.TestingT{}
 
 	if m.Check(mt) == false {
 		t.Errorf("Assertions should have passed")
+	}
+}
+
+func mustMock(t *testing.T, name string) (*bintest.Mock, func()) {
+	m, err := bintest.NewMock(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m, func() {
+		if err := m.Close(); err != nil {
+			t.Error(err)
+		}
 	}
 }

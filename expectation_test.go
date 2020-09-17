@@ -1,9 +1,10 @@
 package bintest
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/buildkite/bintest/v3/testutil"
 )
 
 func TestMatchExpectations(t *testing.T) {
@@ -55,19 +56,6 @@ func TestExplainExpectationMatch(t *testing.T) {
 	}
 }
 
-type testingT struct {
-	Logs   []string
-	Errors []string
-}
-
-func (t *testingT) Logf(format string, args ...interface{}) {
-	t.Logs = append(t.Logs, fmt.Sprintf(format, args...))
-}
-
-func (t *testingT) Errorf(format string, args ...interface{}) {
-	t.Errors = append(t.Errors, fmt.Sprintf(format, args...))
-}
-
 func TestCheckIndividualExpectations(t *testing.T) {
 	var match = []*Expectation{
 		{name: "test", arguments: Arguments{"llamas", "rock"}, totalCalls: 1, minCalls: 1, maxCalls: 1},
@@ -88,7 +76,7 @@ func TestCheckIndividualExpectations(t *testing.T) {
 	}
 
 	for _, exp := range notMatch {
-		if exp.Check(&testingT{}) {
+		if exp.Check(&testutil.TestingT{}) {
 			t.Fatalf("Expected %s to NOT match", exp)
 		}
 	}
