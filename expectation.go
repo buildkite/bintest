@@ -201,7 +201,8 @@ func (e *Expectation) checkStdin(t TestingT) bool {
 	switch expected := e.stdin.(type) {
 	case string:
 		if expected != actual {
-			if len(actual) <= 64 {
+			// if the stdin was very long, just report the size, not the content
+			if len(actual) <= 1024 {
 				t.Logf("Expected stdin %q, got %q", expected, actual)
 			} else {
 				t.Logf("Expected %d bytes stdin, got %d bytes", len(expected), len(e.readStdin))
