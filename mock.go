@@ -142,7 +142,8 @@ func (m *Mock) invoke(call *Call) {
 		// read all of stdin
 		buf, err := ioutil.ReadAll(call.Stdin)
 		if err != nil {
-			panic("error reading stdin")
+			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error reading stdin: %v\033[0m\n", err)
+			call.Exit(1)
 		}
 		// copy to Expectation
 		expected.readStdin = make([]byte, len(buf))
