@@ -81,3 +81,36 @@ func TestCheckIndividualExpectations(t *testing.T) {
 		}
 	}
 }
+
+func TestExpectionWithStdin(t *testing.T) {
+	testCases := []struct {
+		label     string
+		stdin     interface{}
+		readStdin []byte
+		expect    bool
+	}{
+		{"string match", "hello", []byte("hello"), true},
+		{"string mismatch", "hello", []byte("world"), false},
+		{"MatchPattern match", MatchPattern("lo$"), []byte("hello"), true},
+		{"MatchPattern mismatch", MatchPattern("^lo"), []byte("hello"), false},
+		{"MatchAny", MatchAny(), []byte("hello"), true},
+		{"MatchAny nil readStdin", MatchAny(), nil, true},
+		{"string match nil readStdin", "nope", nil, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.label, func(t *testing.T) {
+			exp := Expectation{stdin: tc.stdin, readStdin: tc.readStdin}
+			fakeT := &testutil.TestingT{}
+			if exp.Check(fakeT) != tc.expect {
+				t.Errorf("expected Check() to be %v for %s", tc.expect, tc.label)
+			}
+			expectedLogs := 0
+			if tc.expect == false {
+				expectedLogs = 1
+			}
+			if len(fakeT.Logs) != expectedLogs {
+				t.Errorf("expected %d errors when Check() is %v, got %d", expectedLogs, tc.expect, len(fakeT.Logs))
+			}
+		})
+	}
+}
