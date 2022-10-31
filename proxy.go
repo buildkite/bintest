@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -36,6 +37,9 @@ type Proxy struct {
 
 	// A temporary directory created for the binary
 	tempDir string
+
+	closedMu sync.RWMutex
+	closed   bool
 }
 
 // CompileProxy generates a mock binary at the provided path.
@@ -169,18 +173,35 @@ func (p *Proxy) newCall(pid int, args []string, env []string, dir string) *Call 
 	}
 }
 
-// Close the proxy and remove the temp directory
-func (p *Proxy) Close() error {
-	p.Server.deregisterProxy(p)
-	close(p.Ch)
-
-	if p.tempDir != "" {
-		if removeErr := os.RemoveAll(p.tempDir); removeErr != nil {
-			return removeErr
-		}
+func (p *Proxy) dispatch(c *Call) {
+	// The server can be serving a request while the proxy is being closed,
+	// causing a data race between closing the channel and concurrently sending
+	// to it.
+	p.closedMu.RLock()
+	if !p.closed {
+		p.Ch <- c
 	}
+	p.closedMu.RUnlock()
+}
 
-	return nil
+// Close the proxy and remove the temp directory.
+func (p *Proxy) Close() error {
+	// Prevent the proxy from dispatching further calls.
+	p.closedMu.Lock()
+	if p.closed {
+		p.closedMu.Unlock()
+		return errors.New("proxy already closed")
+	}
+	close(p.Ch)
+	p.closed = true
+	p.closedMu.Unlock()
+
+	p.Server.deregisterProxy(p)
+
+	if p.tempDir == "" {
+		return nil
+	}
+	return os.RemoveAll(p.tempDir)
 }
 
 // Call is created for every call to the proxied binary
