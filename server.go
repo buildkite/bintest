@@ -229,8 +229,7 @@ func (s *Server) handleNewCall(w http.ResponseWriter, r *http.Request) {
 
 	debugf("[server] Registered call handler for pid %d", call.PID)
 
-	// dispatch to whatever handles the call
-	proxy.Ch <- call
+	proxy.dispatch(call)
 }
 
 type callHandler struct {
