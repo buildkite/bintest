@@ -1,4 +1,8 @@
 # Bintest
+
+> :warning: This is an open-sourced tool we use internally. You're welcome to
+> use it, but we are unable to provide support.
+
 [![Documentation](https://godoc.org/github.com/buildkite/bintest?status.svg)](http://godoc.org/github.com/buildkite/bintest)
 
 A set of tools for generating fake binaries that can be used for testing. A binary is compiled and then can be orchestrated from your test suite and later checked for assertions.
