@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,7 +48,7 @@ func CompileProxy(path string) (*Proxy, error) {
 
 	if !filepath.IsAbs(path) {
 		var err error
-		tempDir, err = ioutil.TempDir("", "binproxy")
+		tempDir, err = os.MkdirTemp("", "binproxy")
 		if err != nil {
 			return nil, fmt.Errorf("Error creating temp dir: %v", err)
 		}
@@ -105,7 +104,7 @@ func LinkTestBinaryAsProxy(path string) (*Proxy, error) {
 
 	if !filepath.IsAbs(path) {
 		var err error
-		tempDir, err = ioutil.TempDir("", "binproxy")
+		tempDir, err = os.MkdirTemp("", "binproxy")
 		if err != nil {
 			return nil, fmt.Errorf("Error creating temp dir: %v", err)
 		}

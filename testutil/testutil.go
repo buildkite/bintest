@@ -3,7 +3,7 @@ package testutil
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,13 +39,13 @@ func (t *TestingT) Copy(dst *testing.T) {
 // WriteBatchFile writes the given lines as a windows batch file of the given
 // name in a new temporary directory.
 func WriteBatchFile(t *testing.T, name string, lines []string) string {
-	tmpDir, err := ioutil.TempDir("", "batch-files-of-horror")
+	tmpDir, err := os.MkdirTemp("", "batch-files-of-horror")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	batchfile := filepath.Join(tmpDir, name)
-	err = ioutil.WriteFile(batchfile, []byte(strings.Join(lines, "\r\n")), 0600)
+	err = os.WriteFile(batchfile, []byte(strings.Join(lines, "\r\n")), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}

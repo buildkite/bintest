@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,7 +110,7 @@ func compileClient(dest string, vars []string) error {
 	if _, err := os.Lstat(dir); os.IsNotExist(err) {
 		_ = os.Mkdir(filepath.Join(wd, dir), 0700)
 
-		if err = ioutil.WriteFile(f, []byte(clientSrc), 0500); err != nil {
+		if err = os.WriteFile(f, []byte(clientSrc), 0500); err != nil {
 			_ = os.RemoveAll(dir)
 			return err
 		}
@@ -138,7 +137,7 @@ func newCompileCache() (*compileCache, error) {
 	cc := &compileCache{}
 
 	var err error
-	cc.Dir, err = ioutil.TempDir("", "binproxy")
+	cc.Dir, err = os.MkdirTemp("", "binproxy")
 	if err != nil {
 		return nil, fmt.Errorf("Error creating temp dir: %v", err)
 	}
@@ -212,7 +211,7 @@ func copyFile(dst, src string, perm os.FileMode) (err error) {
 		err = in.Close()
 	}()
 
-	tmp, err := ioutil.TempFile(filepath.Dir(dst), "")
+	tmp, err := os.CreateTemp(filepath.Dir(dst), "")
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package bintest_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -422,7 +421,7 @@ func TestMockParallelCommandsWithPassthrough(t *testing.T) {
 	var wg sync.WaitGroup
 
 	for i := 1; i < 3; i++ {
-		tmpDir, err := ioutil.TempDir("", "parallel-mocks")
+		tmpDir, err := os.MkdirTemp("", "parallel-mocks")
 		if err != nil {
 			t.Fatal(err)
 		}

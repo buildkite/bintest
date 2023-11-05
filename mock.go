@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -140,7 +139,7 @@ func (m *Mock) invoke(call *Call) {
 
 	if expected.stdin != nil {
 		// read all of stdin
-		buf, err := ioutil.ReadAll(call.Stdin)
+		buf, err := io.ReadAll(call.Stdin)
 		if err != nil {
 			fmt.Fprintf(call.Stderr, "\033[31m🚨 Error reading stdin: %v\033[0m\n", err)
 			call.Exit(1)
@@ -149,7 +148,7 @@ func (m *Mock) invoke(call *Call) {
 		expected.readStdin = make([]byte, len(buf))
 		copy(expected.readStdin, buf)
 		// restore original stdin
-		call.Stdin = ioutil.NopCloser(bytes.NewReader(buf))
+		call.Stdin = io.NopCloser(bytes.NewReader(buf))
 	}
 
 	if m.passthroughPath != "" {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"reflect"
@@ -328,7 +327,7 @@ func TestProxyCloseRemovesFile(t *testing.T) {
 func TestProxyGetsWorkingDirectoryFromClient(t *testing.T) {
 	defer leaktest.Check(t)()
 
-	tempDir, err := ioutil.TempDir("", "proxy-wd-test")
+	tempDir, err := os.MkdirTemp("", "proxy-wd-test")
 	if err != nil {
 		t.Fatal(err)
 	}
