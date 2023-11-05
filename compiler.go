@@ -97,27 +97,21 @@ func compileClient(dest string, vars []string) error {
 		return compileCacheInstance.Copy(dest, vars)
 	}
 
-	wd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
 	// we create a temp subdir relative to current dir so that
 	// we can make use of gopath / vendor dirs
 	dir := fmt.Sprintf(`_bintest_%x`, sha1.Sum([]byte(clientSrc)))
 	f := filepath.Join(dir, `main.go`)
 
-	if _, err := os.Lstat(dir); os.IsNotExist(err) {
-		_ = os.Mkdir(filepath.Join(wd, dir), 0700)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
 
-		if err = os.WriteFile(f, []byte(clientSrc), 0500); err != nil {
-			_ = os.RemoveAll(dir)
-			return err
-		}
+	if err := os.WriteFile(f, []byte(clientSrc), 0500); err != nil {
+		return err
 	}
 
 	if err := compile(dest, f, vars); err != nil {
-		_ = os.RemoveAll(dir)
 		return err
 	}
 
