@@ -107,12 +107,12 @@ func compileClient(dest string, vars []string) error {
 	dir := fmt.Sprintf(`_bintest_%x`, sha1.Sum([]byte(clientSrc)))
 	f := filepath.Join(dir, `main.go`)
 
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
 
-	if err := os.WriteFile(f, []byte(clientSrc), 0500); err != nil {
+	if err := os.WriteFile(f, []byte(clientSrc), 0o500); err != nil {
 		return err
 	}
 

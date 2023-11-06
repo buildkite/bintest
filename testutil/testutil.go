@@ -45,7 +45,7 @@ func WriteBatchFile(t *testing.T, name string, lines []string) string {
 	}
 
 	batchfile := filepath.Join(tmpDir, name)
-	err = os.WriteFile(batchfile, []byte(strings.Join(lines, "\r\n")), 0600)
+	err = os.WriteFile(batchfile, []byte(strings.Join(lines, "\r\n")), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
