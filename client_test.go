@@ -2,7 +2,7 @@ package bintest_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,7 +23,7 @@ func TestClient(t *testing.T) {
 		case `/calls/1234567/exitcode`:
 			fmt.Fprintln(w, `0`)
 		case `/debug`:
-			out, _ := ioutil.ReadAll(r.Body)
+			out, _ := io.ReadAll(r.Body)
 			_ = r.Body.Close()
 			t.Logf("%s", out)
 		default:

@@ -3,11 +3,13 @@ package bintest
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 )
@@ -59,10 +61,22 @@ func (c *Client) Run() int {
 
 	args := c.Args[:]
 
-	// In some situations the binary can be invoked via a relative path which
-	// makes it hard to lookup. In this case we use the executable location
-	if !filepath.IsAbs(os.Args[0]) {
-		filename, err := os.Executable()
+	// In some situations the binary can be invoked via a relative path, which
+	// makes it hard to lookup. Also, the invoked path is a symlink, so
+	// os.Executable won't give the right result either.
+	// exec.LookPath does half of what we want, filepath.Abs the other:
+	// - If args[0] contains a slash, we were invoked relative to the working
+	//   directory, and so LookPath makes no changes, so use filepath.Abs.
+	// - If args[0] is just a file, we were maybe invoked via PATH resolution,
+	//   and so LookPath returns an absolute path.
+	if !filepath.IsAbs(args[0]) {
+		lookpath, err := exec.LookPath(args[0])
+		// Typically, allowing PATH to include . is a security vulnerability.
+		// However, we're not in control of how we were invoked.
+		if err != nil && !errors.Is(err, exec.ErrDot) {
+			panic(err)
+		}
+		filename, err := filepath.Abs(lookpath)
 		if err != nil {
 			panic(err)
 		}

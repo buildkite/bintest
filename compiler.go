@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -86,21 +86,21 @@ func compileClient(dest string, vars []string) error {
 
 	// first off we create a temp dir for caching
 	if compileCacheInstance == nil {
-		var err error
-		compileCacheInstance, err = newCompileCache()
+		cci, err := newCompileCache()
 		if err != nil {
 			return err
 		}
+		compileCacheInstance = cci
 	}
 
-	// if we can, use the compile cache
-	if compileCacheInstance.IsCached(vars) {
-		return compileCacheInstance.Copy(dest, vars)
-	}
-
-	wd, err := os.Getwd()
+	cacheBinaryPath, err := compileCacheInstance.file(vars)
 	if err != nil {
 		return err
+	}
+
+	// if we can, symlink to an existing file in the compile cache
+	if compileCacheInstance.IsCached(vars) {
+		return replaceSymlink(cacheBinaryPath, dest)
 	}
 
 	// we create a temp subdir relative to current dir so that
@@ -108,26 +108,36 @@ func compileClient(dest string, vars []string) error {
 	dir := fmt.Sprintf(`_bintest_%x`, sha1.Sum([]byte(clientSrc)))
 	f := filepath.Join(dir, `main.go`)
 
-	if _, err := os.Lstat(dir); os.IsNotExist(err) {
-		_ = os.Mkdir(filepath.Join(wd, dir), 0700)
-
-		if err = ioutil.WriteFile(f, []byte(clientSrc), 0500); err != nil {
-			_ = os.RemoveAll(dir)
-			return err
-		}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
 	}
+	defer os.RemoveAll(dir)
 
-	if err := compile(dest, f, vars); err != nil {
-		_ = os.RemoveAll(dir)
+	if err := os.WriteFile(f, []byte(clientSrc), 0o500); err != nil {
 		return err
 	}
 
-	// cache for next time
-	if err := compileCacheInstance.Cache(dest, vars); err != nil {
+	if err := compile(cacheBinaryPath, f, vars); err != nil {
 		return err
 	}
 
-	return os.RemoveAll(dir)
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+
+	// Create a symlink to the binary.
+	return replaceSymlink(cacheBinaryPath, dest)
+}
+
+// To keep the old behaviour of overwriting what was in the destination path,
+// replaceSymlink creates a symlink with a temporary name and then renames it
+// over the destination path.
+func replaceSymlink(oldname, newname string) error {
+	tempname := fmt.Sprintf("%s.%x", newname, rand.Int())
+	if err := os.Symlink(oldname, tempname); err != nil {
+		return err
+	}
+	return os.Rename(tempname, newname)
 }
 
 type compileCache struct {
@@ -138,7 +148,7 @@ func newCompileCache() (*compileCache, error) {
 	cc := &compileCache{}
 
 	var err error
-	cc.Dir, err = ioutil.TempDir("", "binproxy")
+	cc.Dir, err = os.MkdirTemp("", "binproxy")
 	if err != nil {
 		return nil, fmt.Errorf("Error creating temp dir: %v", err)
 	}
@@ -152,27 +162,8 @@ func (c *compileCache) IsCached(vars []string) bool {
 		panic(err)
 	}
 
-	if _, err := os.Stat(path); err == nil {
-		return true
-	}
-
-	return false
-}
-
-func (c *compileCache) Copy(dest string, vars []string) error {
-	src, err := c.file(vars)
-	if err != nil {
-		return err
-	}
-	return copyFile(dest, src, 0777)
-}
-
-func (c *compileCache) Cache(src string, vars []string) error {
-	dest, err := c.file(vars)
-	if err != nil {
-		return err
-	}
-	return copyFile(dest, src, 0666)
+	_, err = os.Stat(path)
+	return err == nil
 }
 
 func (c *compileCache) Key(vars []string) (string, error) {
@@ -201,35 +192,4 @@ func (c *compileCache) file(vars []string) (string, error) {
 	}
 
 	return filepath.Join(c.Dir, k), nil
-}
-
-func copyFile(dst, src string, perm os.FileMode) (err error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err = in.Close()
-	}()
-
-	tmp, err := ioutil.TempFile(filepath.Dir(dst), "")
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(tmp, in)
-	if err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	if err = tmp.Close(); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	if err = os.Chmod(tmp.Name(), perm); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-
-	return os.Rename(tmp.Name(), dst)
 }
