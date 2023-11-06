@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,7 +100,7 @@ func compileClient(dest string, vars []string) error {
 
 	// if we can, symlink to an existing file in the compile cache
 	if compileCacheInstance.IsCached(vars) {
-		return os.Symlink(cacheBinaryPath, dest)
+		return replaceSymlink(cacheBinaryPath, dest)
 	}
 
 	// we create a temp subdir relative to current dir so that
@@ -125,7 +126,18 @@ func compileClient(dest string, vars []string) error {
 	}
 
 	// Create a symlink to the binary.
-	return os.Symlink(cacheBinaryPath, dest)
+	return replaceSymlink(cacheBinaryPath, dest)
+}
+
+// To keep the old behaviour of overwriting what was in the destination path,
+// replaceSymlink creates a symlink with a temporary name and then renames it
+// over the destination path.
+func replaceSymlink(oldname, newname string) error {
+	tempname := fmt.Sprintf("%s.%x", newname, rand.Int())
+	if err := os.Symlink(oldname, tempname); err != nil {
+		return err
+	}
+	return os.Rename(tempname, newname)
 }
 
 type compileCache struct {
