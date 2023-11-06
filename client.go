@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 )
@@ -59,10 +60,14 @@ func (c *Client) Run() int {
 
 	args := c.Args[:]
 
-	// In some situations the binary can be invoked via a relative path which
-	// makes it hard to lookup. In this case we use the executable location
-	if !filepath.IsAbs(os.Args[0]) {
-		filename, err := os.Executable()
+	// In some situations the binary can be invoked via a relative path, which
+	// makes it hard to lookup. Also, the invoked path is a symlink, so
+	// os.Executable won't give the right result either.
+	// exec.LookPath does what we want:
+	// - If args[0] contains a slash, we were invoked relative to pwd.
+	// - If args[0] is just a file, we were maybe invoked via PATH resolution.
+	if !filepath.IsAbs(args[0]) {
+		filename, err := exec.LookPath(args[0])
 		if err != nil {
 			panic(err)
 		}
