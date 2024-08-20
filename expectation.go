@@ -6,13 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/sasha-s/go-deadlock"
+	"sync"
 )
 
 // Expectation is used for setting expectations
 type Expectation struct {
-	deadlock.RWMutex
+	sync.RWMutex
 
 	// Name of the binary that the expectation is against
 	name string

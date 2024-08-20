@@ -2,5 +2,5 @@ steps:
   - command: go test -v ./...
     plugins:
       docker#v1.1.1:
-        image: "golang:1.9.3"
+        image: "golang:1.22"
         workdir: /go/src/github.com/buildkite/bintest

@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/sasha-s/go-deadlock"
 )
 
 // A single instance of the server is run for each golang process. The server has sessions which then
@@ -20,7 +18,7 @@ import (
 
 var (
 	serverInstance *Server
-	serverLock     deadlock.Mutex
+	serverLock     sync.Mutex
 )
 
 // StartServer starts an instance of a proxy server
