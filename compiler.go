@@ -10,9 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
-
-	deadlock "github.com/sasha-s/go-deadlock"
 )
 
 const (
@@ -43,7 +42,7 @@ func main() {
 
 var (
 	compileCacheInstance *compileCache
-	compileLock          deadlock.Mutex
+	compileLock          sync.Mutex
 )
 
 func compile(dest string, src string, vars []string) error {
